@@ -42,6 +42,7 @@ public partial class LunoEditor : RichTextBox
         // イベント登録
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
+        MouseMove += OnMouseMove;
         TextChanged += OnTextChanged;
 
         // 初期ドキュメント設定
@@ -236,7 +237,47 @@ public partial class LunoEditor : RichTextBox
             run.ToolTip = "クリックして表示"; 
         });
 
+        // URL: http(s)://...
+        changed |= ApplyRegexStyle(para, text, @"https?://[^\s<>""]+", (run) => {
+            run.Foreground = new SolidColorBrush(Luno.Core.Theming.LunoColors.AccentBlue);
+            run.TextDecorations = TextDecorations.Underline;
+            run.Tag = "URL"; 
+            run.Cursor = Cursors.Hand;
+        });
+
         return changed;
+    }
+
+    private Run? _lastHoveredUrlRun;
+
+    private void OnMouseMove(object sender, MouseEventArgs e)
+    {
+        var point = e.GetPosition(this);
+        var pointer = GetPositionFromPoint(point, true);
+        
+        if (pointer != null && pointer.Parent is Run run && run.Tag as string == "URL")
+        {
+            if (_lastHoveredUrlRun != run)
+            {
+                // リセット
+                if (_lastHoveredUrlRun != null)
+                {
+                    _lastHoveredUrlRun.Foreground = new SolidColorBrush(Luno.Core.Theming.LunoColors.AccentBlue);
+                }
+                
+                // ホバー適用 (紫)
+                run.Foreground = Brushes.Purple; 
+                _lastHoveredUrlRun = run;
+            }
+        }
+        else
+        {
+            if (_lastHoveredUrlRun != null)
+            {
+                _lastHoveredUrlRun.Foreground = new SolidColorBrush(Luno.Core.Theming.LunoColors.AccentBlue);
+                _lastHoveredUrlRun = null;
+            }
+        }
     }
 
     private bool ApplyRegexStyle(Paragraph para, string text, string pattern, Action<Run> styleAction)

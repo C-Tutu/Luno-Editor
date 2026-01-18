@@ -1,77 +1,81 @@
-# Phase 5: Refinement & Expansion (The Notebook Evolution)
+# Phase 6: Tab Management & File Import
 
-アプリを「メモ帳」のモダンな進化系へと昇華させるためのフェーズです。視認性、操作性、そして書き心地を徹底的に追求します。
-
-## User Review Required
-> [!IMPORTANT]
-> **アーキテクチャ変更の可能性**: タブ実装（縦/横）に伴い、現在の単一ドキュメント管理から「Multi-Document Architecture」への移行設計が含まれます。これは将来的な大規模改修の布石となります。
-
-## Proposed Changes
-
-### 1. UI/UX Refinement (Notepad Base)
-Windowsの「メモ帳」をベースに、必要な情報を網羅しつつLunoらしいミニマルさを維持します。
-
-#### [MODIFY] Status Bar
-ステータスバーを拡張し、以下の情報を表示します。
-- **左側**: `行 X, 列 Y` | `Z 文字`
-- **右側**: `ズーム A%` | `Windows (CRLF)` | `UTF-8`
-
-#### [MODIFY] Markdown Behavior
-- **引用 (`>`) の適正化**: 
-  - 改行時は引用を継続。
-  - **修正点**: 空行で [Enter](file:///c:/Projects/Luno-Editor/Luno/Core/Editor/LunoEditor.cs#251-331) を押した際、引用を解除して通常段落に戻すロジックを追加。
-- **ハイパーリンク**: `Ctrl + Click` の挙動を再検証し、確実にブラウザが開くように修正。
-
-### 2. Theming (Luno 12 Palette)
-「紙のような質感」と「目の負担軽減」を両立する12色のテーマパレットを実装します。完全な黒(#000000)や白(#FFFFFF)は使用せず、目に優しい色調を採用します。
-
-| テーマ名 (和名) | 色調イメージ | 特徴 |
-| :--- | :--- | :--- |
-| **Kinari (生成)** | Off-White | デフォルトごく薄いクリーム色。目に刺さらない白。 |
-| **Sumi (墨)** | Dark Gray | デフォルト。完全な黒ではない深いグレー。 |
-| **Sakura (桜)** | Pale Pink | 春のような淡いピンク。 |
-| **Sora (空)** | Sky Blue | 爽やかな薄青色。 |
-| **Matcha (抹茶)** | Muted Green | 落ち着いた緑色。リラックス効果。 |
-| **Anzu (杏)** | Soft Orange | 温かみのある橙色。 |
-| **Fuji (藤)** | Light Purple | 上品な薄紫色。 |
-| **Kogane (黄金)** | Muted Gold | 紙の変色のようなアンティークな黄色。 |
-| **Nezumi (鼠)** | Neutral Gray | 無彩色のクールなグレー。 |
-| **Yoru (夜)** | Midnight Blue | 深い夜のような青。集中力向上。 |
-| **Koubai (紅梅)** | Reddish Purple | 華やかだが落ち着いた赤紫。 |
-| **Aizome (藍染)** | Deep Indigo | 日本の伝統的な濃い藍色。 |
-
-### 3. Tab Interface Design (Architectural)
-縦タブ（サイドバー）と横タブ（トップバー）の両立を目指した設計を導入します。
-
-#### Design Concept
-- **設定による切り替え**: ユーザー設定で `TabMode: Horizontal | Vertical` を選択可能に。
-- **Horizontal (Default)**: 
-  - ブラウザのような上部タブ。
-  - スペース効率重視。
-- **Vertical**: 
-  - 左側サイドバーにリスト表示。
-  - ワイドモニター向け。タイトルが長くても見やすい。
-  - グループ化やアイコン表示などのちの拡張性を確保。
-
-#### Implementation Strategy (Step-by-Step)
-1.  **Data Structure**: `TabItem` モデル（Content, FilePath, IsModified, Title）の作成。
-2.  **View**: `TabControl` をカスタマイズし、`TabStripPlacement` プロパティで縦横を切り替えられるようにする。
-3.  **Interaction**: `Ctrl+T` (新規), `Ctrl+W` (閉じる), `Ctrl+Tab` (切り替え) の実装。
+## 概要
+メモ帳ライクなタブ管理とファイルインポート機能を実装。UI/UXの細かな修正も含む。
 
 ---
 
-## Verification Plan
+## フェーズ6A: UI/UX修正（優先度高）
 
-### Automated Tests
-- 新規追加ロジック（引用解除など）のユニットテスト（可能であれば）。
+### 1. ズーム全体適用
 
-### Manual Verification
-1.  **ステータスバー**: 
-    - カーソル移動に合わせて「行」「列」「文字数」が正確に更新されるか。
-    - ズーム変更が即座に反映されるか。
-2.  **Markdown**:
-    - `> 引用` -> Enter -> `> (継続)` -> Enter (空行) -> [(解除)](file:///c:/Projects/Luno-Editor/Luno/Core/Persistence/SettingsManager.cs#49-71) のフロー確認。
-3.  **テーマ**:
-    - 12色すべてで文字の視認性が確保されているか。極端な低コントラストがないか。
-4.  **リンク**:
-    - URLの上にマウスを置いた時のカーソル変化と、Ctrl+クリックでのブラウザ起動。
+#### [MODIFY] [MainWindow.xaml.cs](file:///c:/Projects/Luno-Editor/Luno/MainWindow.xaml.cs)
+- [SetZoomLevel](file:///c:/Projects/Luno-Editor/Luno/MainWindow.xaml.cs#355-366) で `LayoutTransform` を使用してウィンドウ全体にズーム適用
+
+### 2. テーマ円形ボタンの視認性向上
+
+#### [MODIFY] [SettingsWindow.xaml.cs](file:///c:/Projects/Luno-Editor/Luno/SettingsWindow.xaml.cs)
+- 各カラー円に**白/黒の二重枠**を追加（背景色問わず視認可能）
+
+### 3. リンクホバーエフェクト
+
+#### [MODIFY] [LunoEditor.cs](file:///c:/Projects/Luno-Editor/Luno/Core/Editor/LunoEditor.cs)
+- URL検出時に下線+青色スタイル適用
+- `OnMouseMove` でホバー時に色を変更（紫など）
+
+---
+
+## フェーズ6B: タブ管理
+
+### アーキテクチャ
+
+```
+MainWindow
+├── TabControl (水平タブ)
+│   ├── Tab 1 (無題)
+│   ├── Tab 2 (file.txt)
+│   └── [+] 新規タブボタン
+└── EditorContainer (各タブにLunoEditorインスタンス)
+```
+
+### 新規ファイル
+
+#### [NEW] [EditorTab.cs](file:///c:/Projects/Luno-Editor/Luno/Core/Editor/EditorTab.cs)
+- タブデータモデル: FileName, FilePath, IsModified, Content
+
+#### [MODIFY] [MainWindow.xaml](file:///c:/Projects/Luno-Editor/Luno/MainWindow.xaml)
+- `TabControl` 追加、各タブに [LunoEditor](file:///c:/Projects/Luno-Editor/Luno/Core/Editor/LunoEditor.cs#16-777) インスタンス
+
+#### [MODIFY] [MainWindow.xaml.cs](file:///c:/Projects/Luno-Editor/Luno/MainWindow.xaml.cs)
+- タブ追加/削除/切り替えロジック
+- 未保存でも閉じ可能（メモ帳と同じ設計）
+
+---
+
+## フェーズ6C: ファイルインポート
+
+### 対応ファイル形式
+- テキスト: `.txt`, [.md](file:///c:/Projects/Luno-Editor/README.md), `.log`
+- コード: [.cs](file:///c:/Projects/Luno-Editor/Luno/App.xaml.cs), `.js`, `.py`, `.json`, `.xml`, `.html`, `.css`
+- Office (プレーンテキスト抽出): `.docx`, `.xlsx` (将来)
+
+#### [NEW] [FileImporter.cs](file:///c:/Projects/Luno-Editor/Luno/Core/Persistence/FileImporter.cs)
+- `OpenFileDialog` でファイル選択
+- エンコーディング自動検出
+
+#### [MODIFY] [MainWindow.xaml](file:///c:/Projects/Luno-Editor/Luno/MainWindow.xaml)
+- メニューまたは `Ctrl+O` ショートカット追加
+
+---
+
+## 検証計画
+
+1. ズームが全UI要素に適用されることを確認
+2. テーマ円が全背景色で視認可能
+3. 複数タブの作成・切り替え・クローズ
+4. ファイルを開いてタブに表示
+
+---
+
+## 次回: ロゴ実装
+ユーザーがロゴを準備後、アイコン設定を実施。

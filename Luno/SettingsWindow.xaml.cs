@@ -60,7 +60,7 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// 12色の円形ボタンを作成
+    /// 12色の円形ボタンを作成（二重枠で視認性向上）
     /// </summary>
     private void CreateThemeButtons()
     {
@@ -70,8 +70,8 @@ public partial class SettingsWindow : Window
         {
             var button = new Button
             {
-                Width = 40,
-                Height = 40,
+                Width = 44,
+                Height = 44,
                 Margin = new Thickness(4),
                 Padding = new Thickness(0),
                 Background = Brushes.Transparent,
@@ -81,18 +81,41 @@ public partial class SettingsWindow : Window
                 Tag = theme
             };
 
-            // 円形のコンテンツ
-            var ellipse = new Ellipse
+            // 二重枠のコンテンツ (Grid)
+            var grid = new Grid();
+            
+            // 外側の枠（白）
+            var outerRing = new Ellipse
+            {
+                Width = 36,
+                Height = 36,
+                Fill = Brushes.Transparent,
+                Stroke = Brushes.White,
+                StrokeThickness = theme == _selectedTheme ? 3 : 1
+            };
+            
+            // 内側の枠（黒）
+            var innerRing = new Ellipse
             {
                 Width = 32,
                 Height = 32,
-                Fill = new SolidColorBrush(theme.Background),
-                Stroke = theme == _selectedTheme 
-                    ? Brushes.White
-                    : new SolidColorBrush(Color.FromArgb(100, 128, 128, 128)),
-                StrokeThickness = theme == _selectedTheme ? 3 : 1
+                Fill = Brushes.Transparent,
+                Stroke = new SolidColorBrush(Color.FromRgb(0x20, 0x20, 0x20)),
+                StrokeThickness = 1
             };
-            button.Content = ellipse;
+            
+            // 円形のテーマカラー
+            var colorCircle = new Ellipse
+            {
+                Width = 28,
+                Height = 28,
+                Fill = new SolidColorBrush(theme.Background)
+            };
+            
+            grid.Children.Add(outerRing);
+            grid.Children.Add(innerRing);
+            grid.Children.Add(colorCircle);
+            button.Content = grid;
 
             // クリックイベント
             button.Click += OnThemeButtonClick;
@@ -100,21 +123,12 @@ public partial class SettingsWindow : Window
             // ホバーエフェクト
             button.MouseEnter += (s, e) =>
             {
-                if (button.Content is Ellipse el) 
-                {
-                    el.StrokeThickness = 2;
-                    el.Stroke = Brushes.White;
-                }
+                outerRing.StrokeThickness = 2;
             };
             button.MouseLeave += (s, e) =>
             {
-                if (button.Content is Ellipse el && button.Tag is LunoPalette.LunoTheme t)
-                {
-                    el.Stroke = t == _selectedTheme 
-                        ? Brushes.White
-                        : new SolidColorBrush(Color.FromArgb(100, 128, 128, 128));
-                    el.StrokeThickness = t == _selectedTheme ? 3 : 1;
-                }
+                if (button.Tag is LunoPalette.LunoTheme t)
+                    outerRing.StrokeThickness = t == _selectedTheme ? 3 : 1;
             };
 
             ThemeButtonsPanel.Children.Add(button);
@@ -132,12 +146,9 @@ public partial class SettingsWindow : Window
             // ボタンの選択状態を更新
             foreach (Button b in ThemeButtonsPanel.Children)
             {
-                if (b.Content is Ellipse el && b.Tag is LunoPalette.LunoTheme t)
+                if (b.Content is Grid g && g.Children.Count > 0 && g.Children[0] is Ellipse outerRing && b.Tag is LunoPalette.LunoTheme t)
                 {
-                    el.Stroke = t == _selectedTheme 
-                        ? Brushes.White
-                        : new SolidColorBrush(Color.FromArgb(100, 128, 128, 128));
-                    el.StrokeThickness = t == _selectedTheme ? 3 : 1;
+                    outerRing.StrokeThickness = t == _selectedTheme ? 3 : 1;
                 }
             }
         }

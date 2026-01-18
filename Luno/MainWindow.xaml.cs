@@ -2,6 +2,8 @@
 
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -65,10 +67,9 @@ public partial class MainWindow : Window
         }
 
         // 保存されたズームレベルを復元
-        if (_settingsManager.Settings.ZoomLevel >= 50 && _settingsManager.Settings.ZoomLevel <= 200)
+        if (_settingsManager.Settings.ZoomLevel >= 10 && _settingsManager.Settings.ZoomLevel <= 500)
         {
-            _zoomLevel = _settingsManager.Settings.ZoomLevel;
-            Editor.FontSize = 14.0 * (_zoomLevel / 100.0);
+            SetZoomLevel((int)_settingsManager.Settings.ZoomLevel);
         }
 
         // 保存されたウィンドウ位置を復元
@@ -84,26 +85,84 @@ public partial class MainWindow : Window
         NoiseOverlay.Fill = NoiseTextureGenerator.GetNoiseBrush();
 
         // エディタにテーマを適用
-        Editor.ApplyTheme(_themeManager.IsDarkMode);
+        ApplyThemeToAllTabs();
 
-        // 保存されたテキストを復元
+        // 保存されたテキストを復元（初期タブ）
+        var initialContent = "";
         if (!string.IsNullOrEmpty(_settingsManager.Settings.LastContent))
         {
-            Editor.SetPlainText(_settingsManager.Settings.LastContent);
+            initialContent = _settingsManager.Settings.LastContent;
         }
+        AddNewTab("無題", initialContent);
 
         // タイマー開始
         _autoSaveTimer.Start();
 
         // リアルタイムステータス更新用イベント
-        Editor.SelectionChanged += (s, e) => UpdateStatusBar();
-        Editor.TextChanged += (s, e) => UpdateStatusBar();
+        // AddNewTab内で設定済み
 
         // 初回ステータス更新
         UpdateStatusBar();
+    }
 
-        // エディタにフォーカスを設定
-        Editor.Focus();
+    private Luno.Core.Editor.LunoEditor? ActiveEditor
+    {
+        get
+        {
+            if (MainTabControl.SelectedItem is TabItem tab && tab.Content is Luno.Core.Editor.LunoEditor editor)
+            {
+                return editor;
+            }
+            return null;
+        }
+    }
+
+    private void AddNewTab(string title = "無題", string content = "", string? filePath = null)
+    {
+        var editor = new Luno.Core.Editor.LunoEditor();
+        editor.ApplyTheme(_themeManager.IsDarkMode);
+        // フォントサイズはBaseFontSize (14)のまま。ズームはUiScaleTransformで制御。
+        editor.FontSize = 14.0; 
+        
+        editor.SelectionChanged += (s, e) => UpdateStatusBar();
+        editor.TextChanged += (s, e) => {
+            UpdateStatusBar();
+            if (MainTabControl.SelectedItem is TabItem t && t.Tag is Luno.Core.Editor.EditorTab tag)
+            {
+                tag.IsModified = true;
+                // ヘッダー更新はBindingまたは手動
+                if (!t.Header.ToString().EndsWith("*")) t.Header = tag.DisplayName;
+            }
+        };
+
+        if (!string.IsNullOrEmpty(content))
+        {
+            editor.SetPlainText(content);
+        }
+
+        var tab = new TabItem
+        {
+            Header = title,
+            Content = editor,
+            Tag = new Luno.Core.Editor.EditorTab { FileName = title, FilePath = filePath, Content = content }
+        };
+
+        MainTabControl.Items.Add(tab);
+        MainTabControl.SelectedItem = tab;
+        
+        // フォーカス
+        editor.Focus();
+    }
+
+    private void ApplyThemeToAllTabs()
+    {
+        foreach (TabItem item in MainTabControl.Items)
+        {
+            if (item.Content is Luno.Core.Editor.LunoEditor editor)
+            {
+                editor.ApplyTheme(_themeManager.IsDarkMode);
+            }
+        }
     }
 
     /// <summary>
@@ -113,15 +172,18 @@ public partial class MainWindow : Window
     {
         try
         {
+            var editor = ActiveEditor;
+            if (editor == null) return;
+
             // テキスト情報
-            var text = Editor.GetPlainText();
+            var text = editor.GetPlainText();
             var charCount = text.Length - text.Count(c => c == '\r' || c == '\n');
 
             CharCountText.Text = $"{charCount:N0} 文字";
             ZoomLevelText.Text = $"{_zoomLevel}%";
 
             // カーソル位置
-            var caretPos = Editor.CaretPosition;
+            var caretPos = editor.CaretPosition;
             if (caretPos != null)
             {
                 var lineStart = caretPos.GetLineStartPosition(0);
@@ -130,7 +192,7 @@ public partial class MainWindow : Window
                     : 1;
                 
                 // 行番号を計算
-                var docStart = Editor.Document.ContentStart;
+                var docStart = editor.Document.ContentStart;
                 var textBeforeCaret = new System.Windows.Documents.TextRange(docStart, caretPos).Text;
                 var line = textBeforeCaret.Count(c => c == '\n') + 1;
 
@@ -161,10 +223,8 @@ public partial class MainWindow : Window
                 _zoomLevel -= 10;
             }
 
-            // エディタのフォントサイズを更新
-            Editor.FontSize = 14.0 * (_zoomLevel / 100.0);
-            _settingsManager.Settings.ZoomLevel = _zoomLevel;
-            UpdateStatusBar();
+            // UI全体をズーム
+            SetZoomLevel(_zoomLevel);
         }
     }
 
@@ -192,7 +252,10 @@ public partial class MainWindow : Window
     {
         try
         {
-            var content = Editor.GetPlainText();
+            var editor = ActiveEditor;
+            if (editor == null) return;
+
+            var content = editor.GetPlainText();
             if (_settingsManager.Settings.LastContent != content)
             {
                 _settingsManager.Settings.LastContent = content;
@@ -224,8 +287,12 @@ public partial class MainWindow : Window
             settings.WindowHeight = Height;
         }
 
-        // テキストを保存
-        settings.LastContent = Editor.GetPlainText();
+        // テキストを保存 (アクティブなエディタ)
+        var editor = ActiveEditor;
+        if (editor != null)
+        {
+            settings.LastContent = editor.GetPlainText();
+        }
         settings.LastSavedAt = DateTime.Now;
 
         _settingsManager.Save();
@@ -322,7 +389,7 @@ public partial class MainWindow : Window
         // RootGridに直接背景色を適用（全システム共通）
         RootGrid.Background = bgBrush;
 
-        Editor.ApplyTheme(isDark);
+        ApplyThemeToAllTabs();
         
         // 設定に保存
         _settingsManager.Settings.ThemeName = theme.Name;
@@ -359,9 +426,67 @@ public partial class MainWindow : Window
     {
         if (level < 10 || level > 500) return;
         _zoomLevel = level;
-        Editor.FontSize = 14.0 * (_zoomLevel / 100.0);
+        
+        // LayoutTransformで全体ズーム
+        UiScaleTransform.ScaleX = _zoomLevel / 100.0;
+        UiScaleTransform.ScaleY = _zoomLevel / 100.0;
+
         _settingsManager.Settings.ZoomLevel = _zoomLevel;
         UpdateStatusBar();
+    }
+    
+    // イベントハンドラ
+    private void NewTabButton_Click(object sender, RoutedEventArgs e)
+    {
+        AddNewTab();
+    }
+
+    private void CloseTabButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is TabItem tab) // TemplatedParent binding hack needed or lookup
+        {
+             // Close logic handled via visual tree walk or tag
+             // For simplify, using direct tab removal if active:
+             // Note: Button click inside template doesn't easily give TabItem without helper.
+             // Relying on VisualTreeHelper to find TabItem
+             var tabItem = FindParent<TabItem>(btn);
+             if (tabItem != null)
+             {
+                 MainTabControl.Items.Remove(tabItem);
+                 if (MainTabControl.Items.Count == 0) Close();
+             }
+        }
+    }
+
+    private static T? FindParent<T>(DependencyObject child) where T : DependencyObject
+    {
+        DependencyObject parentObject = VisualTreeHelper.GetParent(child);
+        if (parentObject == null) return null;
+        if (parentObject is T parent) return parent;
+        return FindParent<T>(parentObject);
+    }
+
+    private async void OpenFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        var path = Luno.Core.Persistence.FileImporter.ShowOpenDialog();
+        if (path != null)
+        {
+            try
+            {
+                var (content, encoding) = await Luno.Core.Persistence.FileImporter.ReadFileAsync(path);
+                AddNewTab(System.IO.Path.GetFileName(path), content, path);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"ファイルを開けませんでした: {ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateStatusBar();
+        ActiveEditor?.Focus();
     }
 
     #region Window Control Buttons
@@ -395,6 +520,7 @@ public partial class MainWindow : Window
 
     private List<int> _findMatches = new();
     private int _currentMatchIndex = -1;
+    private string _lastSearchText = "";
 
     /// <summary>
     /// Ctrl+Fで検索バーを表示
@@ -437,7 +563,7 @@ public partial class MainWindow : Window
         _findMatches.Clear();
         _currentMatchIndex = -1;
         FindMatchCount.Text = "";
-        Editor.Focus();
+        ActiveEditor?.Focus();
     }
 
     private void FindTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
@@ -447,18 +573,16 @@ public partial class MainWindow : Window
 
     private void FindTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (e.Key == System.Windows.Input.Key.Enter)
+        if (e.Key == System.Windows.Input.Key.Escape)
         {
+            HideFindBar(); // Assuming CloseFindBar is HideFindBar
+            ActiveEditor?.Focus();
             e.Handled = true;
-            if (System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift))
-                FindPrevious();
-            else
-                FindNext();
         }
-        else if (e.Key == System.Windows.Input.Key.Escape)
+        else if (e.Key == System.Windows.Input.Key.Enter)
         {
+            FindNext();
             e.Handled = true;
-            HideFindBar();
         }
     }
 
@@ -472,7 +596,44 @@ public partial class MainWindow : Window
         _currentMatchIndex = -1;
 
         var searchText = FindTextBox.Text;
+        _lastSearchText = searchText; // Store the last search text
+
         if (string.IsNullOrEmpty(searchText))
+        {
+            FindMatchCount.Text = "";
+            return;
+        }
+
+        var editor = ActiveEditor;
+        if (editor == null)
+        {
+            FindMatchCount.Text = "0 件";
+            return;
+        }
+
+        // Delegate the actual search to the new PerformSearch method
+        PerformSearch(editor, searchText);
+    }
+
+
+
+    private void PerformSearch(Luno.Core.Editor.LunoEditor editor, string query)
+    {
+        // 既存の検索ロジックをエディタインスタンスを使うように修正
+        // ... (簡易実装のため、ここでは何もしないか、あるいはLunoEditorに検索機能を実装する必要がある)
+        // Phase 4の検索バー実装ではTextPointerを使っていたはず。
+        // ここでは簡単なフォーカス維持だけしておく（本格的な検索は要修正）
+        editor.Focus();
+        // The original logic for _findMatches and NavigateToMatch needs to be adapted
+        // to work with the active editor's content and selection.
+        // For now, we'll keep the existing _findMatches logic but it will operate
+        // on the *current* editor's content.
+        // This part needs significant refactoring to properly integrate with LunoEditor's search.
+
+        _findMatches.Clear();
+        _currentMatchIndex = -1;
+
+        if (string.IsNullOrEmpty(query))
         {
             FindMatchCount.Text = "";
             return;
@@ -480,13 +641,14 @@ public partial class MainWindow : Window
 
         try
         {
-            var content = Editor.GetPlainText();
+            // Assuming LunoEditor has a method to get its plain text content
+            var content = editor.GetPlainText(); 
             var index = 0;
 
-            while ((index = content.IndexOf(searchText, index, StringComparison.OrdinalIgnoreCase)) != -1)
+            while ((index = content.IndexOf(query, index, StringComparison.OrdinalIgnoreCase)) != -1)
             {
                 _findMatches.Add(index);
-                index += searchText.Length;
+                index += query.Length;
             }
 
             if (_findMatches.Count > 0)
@@ -529,18 +691,21 @@ public partial class MainWindow : Window
             var position = _findMatches[matchIndex];
             var searchLength = FindTextBox.Text.Length;
 
+            var editor = ActiveEditor;
+            if (editor == null) return;
+
             // RichTextBoxでのTextPointer取得は複雑なため、シンプルに選択位置を設定
-            var start = Editor.Document.ContentStart.GetPositionAtOffset(position + 2);
+            var start = editor.Document.ContentStart.GetPositionAtOffset(position + 2);
             var end = start?.GetPositionAtOffset(searchLength);
 
             if (start != null && end != null)
             {
-                Editor.Selection.Select(start, end);
-                Editor.Focus();
+                editor.Selection.Select(start, end);
+                editor.Focus();
 
                 // スクロールして表示
-                var rect = Editor.Selection.Start.GetCharacterRect(System.Windows.Documents.LogicalDirection.Forward);
-                Editor.ScrollToVerticalOffset(Editor.VerticalOffset + rect.Top - Editor.ActualHeight / 2);
+                var rect = editor.Selection.Start.GetCharacterRect(System.Windows.Documents.LogicalDirection.Forward);
+                editor.ScrollToVerticalOffset(editor.VerticalOffset + rect.Top - editor.ActualHeight / 2);
             }
         }
         catch

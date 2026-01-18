@@ -12,7 +12,7 @@
 
     <!-- Chromeless Window with proper resize/drag support -->
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="32"
+        <WindowChrome CaptionHeight="40"
                       ResizeBorderThickness="6"
                       GlassFrameThickness="-1"
                       CornerRadius="8"
@@ -20,6 +20,9 @@
     </WindowChrome.WindowChrome>
 
     <Grid x:Name="RootGrid">
+        <Grid.LayoutTransform>
+            <ScaleTransform x:Name="UiScaleTransform" ScaleX="1" ScaleY="1"/>
+        </Grid.LayoutTransform>
         <!-- Noise Texture Overlay (紙の質感 - コードで動的生成) -->
         <Rectangle x:Name="NoiseOverlay"
                    IsHitTestVisible="False"
@@ -28,8 +31,10 @@
         <!-- Main Content Area -->
         <DockPanel Margin="0">
             <!-- Custom Title Bar -->
-            <Grid DockPanel.Dock="Top" Height="32" x:Name="TitleBar">
+            <Grid DockPanel.Dock="Top" Height="40" x:Name="TitleBar">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -44,9 +49,17 @@
                            Foreground="{DynamicResource TextBrush}"/>
 
                 <!-- Window Controls -->
-                <StackPanel Grid.Column="1"
+                <StackPanel Grid.Column="3"
                             Orientation="Horizontal"
-                            WindowChrome.IsHitTestVisibleInChrome="True">
+                            WindowChrome.IsHitTestVisibleInChrome="True"
+                            VerticalAlignment="Top" HorizontalAlignment="Right">
+                    <!-- Global Menu / Open File -->
+                    <Button x:Name="OpenFileButton"
+                            Content="&#xE8E5;"
+                            Style="{StaticResource WindowControlButton}"
+                            Click="OpenFileButton_Click"
+                            ToolTip="ファイルを開く (Ctrl+O)" FontFamily="Segoe Fluent Icons"/>
+
                     <!-- Settings Button -->
                     <Button x:Name="SettingsButton"
                             Content="&#xE713;"
@@ -67,6 +80,17 @@
                             Style="{StaticResource WindowCloseButton}"
                             Click="CloseButton_Click"/>
                 </StackPanel>
+
+                <!-- New Tab Button -->
+                <Button Grid.Column="1"
+                        Content="&#xE710;"
+                        Style="{StaticResource WindowControlButton}"
+                        Width="32" Height="32"
+                        Margin="4,4,0,0"
+                        VerticalAlignment="Top"
+                        Click="NewTabButton_Click"
+                        WindowChrome.IsHitTestVisibleInChrome="True"
+                        ToolTip="新しいタブ (Ctrl+T)" FontFamily="Segoe Fluent Icons"/>
             </Grid>
 
             <!-- Status Bar -->
@@ -207,12 +231,71 @@
                 </Grid>
             </Border>
 
-            <!-- Editor Area -->
+            <!-- Editor Area with Tabs -->
             <Border x:Name="EditorContainer"
                     Margin="8,0,8,0"
                     CornerRadius="4,4,0,0"
                     Background="{DynamicResource EditorBackgroundBrush}">
-                <editor:LunoEditor x:Name="Editor"/>
+                <TabControl x:Name="MainTabControl"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Margin="0,-32,0,0"
+                            SelectionChanged="MainTabControl_SelectionChanged">
+                    <TabControl.Resources>
+                        <Style TargetType="TabItem">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="Padding" Value="12,6"/>
+                            <Setter Property="Height" Value="32"/>
+                            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="TabItem">
+                                        <Grid>
+                                            <Border x:Name="Border" 
+                                                    CornerRadius="4,4,0,0" 
+                                                    Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                                <StackPanel Orientation="Horizontal" Margin="{TemplateBinding Padding}">
+                                                    <TextBlock Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" 
+                                                               Foreground="{TemplateBinding Foreground}"
+                                                               VerticalAlignment="Center"/>
+                                                    <Button x:Name="CloseTabButton" 
+                                                            Content="&#xE711;" 
+                                                            FontFamily="Segoe Fluent Icons"
+                                                            FontSize="10"
+                                                            Width="16" Height="16"
+                                                            Margin="8,0,-4,0"
+                                                            Background="Transparent"
+                                                            BorderThickness="0"
+                                                            Click="CloseTabButton_Click"
+                                                            Visibility="Collapsed"
+                                                            Foreground="{TemplateBinding Foreground}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource EditorBackgroundBrush}"/>
+                                                <Setter TargetName="CloseTabButton" Property="Visibility" Value="Visible"/>
+                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="CloseTabButton" Property="Visibility" Value="Visible"/>
+                                                <Setter TargetName="Border" Property="Background" Value="#20808080"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </TabControl.Resources>
+                    <!-- Tabs will be added in code-behind -->
+                </TabControl>
             </Border>
         </DockPanel>
     </Grid>
