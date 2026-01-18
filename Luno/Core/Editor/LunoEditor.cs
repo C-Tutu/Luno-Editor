@@ -17,7 +17,7 @@ using Luno.Core.Theming;
 public partial class LunoEditor : RichTextBox
 {
     // Markdownパターン（正規表現）
-    private static readonly Regex HeaderPattern = new(@"^(#{1,6})\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex HeaderPattern = new(@"^(#{1,6})\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex ListPattern = new(@"^(\s*)([-*+]|\d+\.)\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex QuotePattern = new(@"^>\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex UrlPattern = new(@"https?://[^\s<>""]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -27,13 +27,16 @@ public partial class LunoEditor : RichTextBox
     private bool _isUpdating;
     private bool _isDarkMode;
     private readonly DispatcherTimer _highlightTimer;
+    private const double BaseFontSize = 14.0;
 
     // テーマカラーブラシ（キャッシュ）
     private SolidColorBrush _defaultBrush = new(LunoColors.TextLight);
-    private static readonly SolidColorBrush HeaderBrush = new(LunoColors.AccentRed);
     private static readonly SolidColorBrush ListMarkerBrush = new(LunoColors.AccentGreen);
     private static readonly SolidColorBrush QuoteBrush = new(LunoColors.TextMuted);
     private static readonly SolidColorBrush UrlBrush = new(LunoColors.AccentBlue);
+
+    // ヘッダーサイズ倍率（H1=2.0倍、H2=1.75倍 ... H6=1.1倍）
+    private static readonly double[] HeaderSizeMultipliers = { 2.0, 1.75, 1.5, 1.35, 1.2, 1.1 };
 
     public LunoEditor()
     {
@@ -47,12 +50,12 @@ public partial class LunoEditor : RichTextBox
 
         // フォント設定
         FontFamily = new FontFamily("Consolas, Yu Gothic UI, Meiryo");
-        FontSize = 14;
+        FontSize = BaseFontSize;
 
         // ハイライト用タイマー（入力後遅延実行）
         _highlightTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(150)
+            Interval = TimeSpan.FromMilliseconds(200)
         };
         _highlightTimer.Tick += OnHighlightTimerTick;
 
@@ -68,7 +71,6 @@ public partial class LunoEditor : RichTextBox
         };
 
         // ブラシをFreeze（パフォーマンス向上）
-        HeaderBrush.Freeze();
         ListMarkerBrush.Freeze();
         QuoteBrush.Freeze();
         UrlBrush.Freeze();
@@ -114,10 +116,17 @@ public partial class LunoEditor : RichTextBox
     {
         if (_isUpdating) return;
 
-        var para = CaretPosition?.Paragraph;
-        if (para != null)
+        try
         {
-            HighlightParagraph(para);
+            var para = CaretPosition?.Paragraph;
+            if (para != null)
+            {
+                HighlightParagraph(para);
+            }
+        }
+        catch
+        {
+            // ハイライト失敗は静かに無視
         }
     }
 
@@ -131,13 +140,17 @@ public partial class LunoEditor : RichTextBox
 
         try
         {
-            foreach (var block in Document.Blocks)
+            foreach (var block in Document.Blocks.ToList())
             {
                 if (block is Paragraph para)
                 {
                     HighlightParagraphInternal(para);
                 }
             }
+        }
+        catch
+        {
+            // ハイライト失敗は静かに無視
         }
         finally
         {
@@ -154,6 +167,10 @@ public partial class LunoEditor : RichTextBox
         try
         {
             HighlightParagraphInternal(para);
+        }
+        catch
+        {
+            // ハイライト失敗は静かに無視
         }
         finally
         {
@@ -176,13 +193,19 @@ public partial class LunoEditor : RichTextBox
         range.ApplyPropertyValue(TextElement.ForegroundProperty, _defaultBrush);
         range.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Normal);
         range.ApplyPropertyValue(TextElement.FontStyleProperty, FontStyles.Normal);
+        range.ApplyPropertyValue(TextElement.FontSizeProperty, BaseFontSize);
         range.ApplyPropertyValue(Inline.TextDecorationsProperty, null);
 
-        // ヘッダーパターン
+        // ヘッダーパターン（フォントサイズ変更）
         var headerMatch = HeaderPattern.Match(text);
         if (headerMatch.Success)
         {
-            ApplyStyle(para, headerMatch.Index, headerMatch.Length, HeaderBrush, FontWeights.Bold);
+            var level = headerMatch.Groups[1].Length; // #の数 (1-6)
+            var sizeMultiplier = HeaderSizeMultipliers[Math.Min(level - 1, 5)];
+            var headerSize = BaseFontSize * sizeMultiplier;
+
+            range.ApplyPropertyValue(TextElement.FontSizeProperty, headerSize);
+            range.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Bold);
             return; // ヘッダー行は他のパターンを無視
         }
 
@@ -197,59 +220,69 @@ public partial class LunoEditor : RichTextBox
 
         // リストパターン（マーカー部分のみ色変更）
         var listMatch = ListPattern.Match(text);
-        if (listMatch.Success)
+        if (listMatch.Success && listMatch.Groups[2].Length > 0)
         {
             var markerStart = listMatch.Groups[1].Length;
             var markerLength = listMatch.Groups[2].Length;
-            ApplyStyle(para, markerStart, markerLength + 1, ListMarkerBrush, null);
+            ApplyStyleSafe(para, markerStart, markerLength + 1, ListMarkerBrush);
         }
 
         // URLパターン
         foreach (Match urlMatch in UrlPattern.Matches(text))
         {
-            ApplyStyle(para, urlMatch.Index, urlMatch.Length, UrlBrush, null, TextDecorations.Underline);
+            ApplyStyleSafe(para, urlMatch.Index, urlMatch.Length, UrlBrush, textDecorations: TextDecorations.Underline);
         }
 
         // 太字パターン
         foreach (Match boldMatch in BoldPattern.Matches(text))
         {
-            ApplyStyle(para, boldMatch.Index, boldMatch.Length, null, FontWeights.Bold);
+            ApplyStyleSafe(para, boldMatch.Index, boldMatch.Length, fontWeight: FontWeights.Bold);
         }
 
         // 斜体パターン
         foreach (Match italicMatch in ItalicPattern.Matches(text))
         {
-            ApplyStyle(para, italicMatch.Index, italicMatch.Length, null, null, null, FontStyles.Italic);
+            ApplyStyleSafe(para, italicMatch.Index, italicMatch.Length, fontStyle: FontStyles.Italic);
         }
     }
 
     /// <summary>
-    /// 指定範囲にスタイルを適用
+    /// 安全にスタイルを適用（例外は無視）
     /// </summary>
-    private void ApplyStyle(
+    private void ApplyStyleSafe(
         Paragraph para,
         int startIndex,
         int length,
-        SolidColorBrush? foreground,
+        SolidColorBrush? foreground = null,
         FontWeight? fontWeight = null,
         TextDecorationCollection? textDecorations = null,
         FontStyle? fontStyle = null)
     {
-        var start = GetTextPointerAtOffset(para.ContentStart, startIndex);
-        var end = GetTextPointerAtOffset(para.ContentStart, startIndex + length);
+        try
+        {
+            if (length <= 0) return;
 
-        if (start == null || end == null) return;
+            var start = GetTextPointerAtOffset(para.ContentStart, startIndex);
+            var end = GetTextPointerAtOffset(para.ContentStart, startIndex + length);
 
-        var range = new TextRange(start, end);
+            if (start == null || end == null) return;
+            if (start.CompareTo(end) >= 0) return;
 
-        if (foreground != null)
-            range.ApplyPropertyValue(TextElement.ForegroundProperty, foreground);
-        if (fontWeight.HasValue)
-            range.ApplyPropertyValue(TextElement.FontWeightProperty, fontWeight.Value);
-        if (textDecorations != null)
-            range.ApplyPropertyValue(Inline.TextDecorationsProperty, textDecorations);
-        if (fontStyle.HasValue)
-            range.ApplyPropertyValue(TextElement.FontStyleProperty, fontStyle.Value);
+            var range = new TextRange(start, end);
+
+            if (foreground != null)
+                range.ApplyPropertyValue(TextElement.ForegroundProperty, foreground);
+            if (fontWeight.HasValue)
+                range.ApplyPropertyValue(TextElement.FontWeightProperty, fontWeight.Value);
+            if (textDecorations != null)
+                range.ApplyPropertyValue(Inline.TextDecorationsProperty, textDecorations);
+            if (fontStyle.HasValue)
+                range.ApplyPropertyValue(TextElement.FontStyleProperty, fontStyle.Value);
+        }
+        catch
+        {
+            // スタイル適用失敗は静かに無視
+        }
     }
 
     /// <summary>
@@ -257,12 +290,16 @@ public partial class LunoEditor : RichTextBox
     /// </summary>
     private static TextPointer? GetTextPointerAtOffset(TextPointer start, int offset)
     {
+        if (offset <= 0) return start;
+
         var current = start;
         int count = 0;
 
-        while (current != null && count < offset)
+        while (current != null)
         {
-            if (current.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            var context = current.GetPointerContext(LogicalDirection.Forward);
+
+            if (context == TextPointerContext.Text)
             {
                 var runLength = current.GetTextRunLength(LogicalDirection.Forward);
                 var remaining = offset - count;
@@ -273,12 +310,11 @@ public partial class LunoEditor : RichTextBox
                 }
 
                 count += runLength;
-                current = current.GetNextContextPosition(LogicalDirection.Forward);
             }
-            else
-            {
-                current = current.GetNextContextPosition(LogicalDirection.Forward);
-            }
+
+            var next = current.GetNextContextPosition(LogicalDirection.Forward);
+            if (next == null) break;
+            current = next;
         }
 
         return current;
@@ -306,9 +342,9 @@ public partial class LunoEditor : RichTextBox
     private void HandleEnterKey(KeyEventArgs e)
     {
         var caretPosition = CaretPosition;
-        var lineStart = caretPosition.GetLineStartPosition(0);
+        var lineStart = caretPosition?.GetLineStartPosition(0);
         
-        if (lineStart == null) return;
+        if (lineStart == null || caretPosition == null) return;
 
         var lineText = new TextRange(lineStart, caretPosition).Text;
 
@@ -367,8 +403,8 @@ public partial class LunoEditor : RichTextBox
         else
         {
             // Tab: スペース挿入（2スペース）
-            CaretPosition.InsertTextInRun("  ");
-            CaretPosition = CaretPosition.GetPositionAtOffset(2);
+            CaretPosition?.InsertTextInRun("  ");
+            CaretPosition = CaretPosition?.GetPositionAtOffset(2);
         }
     }
 
