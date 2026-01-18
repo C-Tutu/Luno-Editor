@@ -53,6 +53,16 @@ public sealed class LunoSettings
     /// 最終保存日時
     /// </summary>
     public DateTime LastSavedAt { get; set; } = DateTime.MinValue;
+
+    /// <summary>
+    /// テーマ名（Kinari, Sumi, Sakura, など）
+    /// </summary>
+    public string ThemeName { get; set; } = "";
+
+    /// <summary>
+    /// ズームレベル（50-200%）
+    /// </summary>
+    public int ZoomLevel { get; set; } = 100;
 }
 
 /// <summary>

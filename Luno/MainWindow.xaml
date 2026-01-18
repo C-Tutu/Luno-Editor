@@ -147,16 +147,18 @@
                     Background="{DynamicResource EditorBackgroundBrush}">
                 <Grid>
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Left: File status (future) -->
+                    <!-- Line, Column -->
                     <TextBlock Grid.Column="0"
-                               x:Name="StatusMessage"
-                               Text=""
+                               x:Name="CursorPosText"
+                               Text="行 1, 列 1"
                                VerticalAlignment="Center"
                                Margin="12,0,0,0"
                                FontSize="11"
@@ -168,29 +170,40 @@
                                x:Name="CharCountText"
                                Text="0 文字"
                                VerticalAlignment="Center"
-                               Margin="12,0,0,0"
+                               Margin="16,0,0,0"
                                FontSize="11"
                                Opacity="0.6"
                                Foreground="{DynamicResource TextBrush}"/>
 
-                    <!-- Line Count -->
-                    <TextBlock Grid.Column="2"
-                               x:Name="LineCountText"
-                               Text="1 行"
-                               VerticalAlignment="Center"
-                               Margin="12,0,0,0"
-                               FontSize="11"
-                               Opacity="0.6"
-                               Foreground="{DynamicResource TextBrush}"/>
+                    <!-- Spacer -->
+                    <TextBlock Grid.Column="2"/>
 
                     <!-- Zoom Level -->
                     <TextBlock Grid.Column="3"
                                x:Name="ZoomLevelText"
                                Text="100%"
                                VerticalAlignment="Center"
-                               Margin="12,0,12,0"
+                               Margin="12,0,0,0"
                                FontSize="11"
                                Opacity="0.6"
+                               Foreground="{DynamicResource TextBrush}"/>
+
+                    <!-- Line Ending -->
+                    <TextBlock Grid.Column="4"
+                               Text="Windows (CRLF)"
+                               VerticalAlignment="Center"
+                               Margin="12,0,0,0"
+                               FontSize="11"
+                               Opacity="0.5"
+                               Foreground="{DynamicResource TextBrush}"/>
+
+                    <!-- Encoding -->
+                    <TextBlock Grid.Column="5"
+                               Text="UTF-8"
+                               VerticalAlignment="Center"
+                               Margin="12,0,12,0"
+                               FontSize="11"
+                               Opacity="0.5"
                                Foreground="{DynamicResource TextBrush}"/>
                 </Grid>
             </Border>

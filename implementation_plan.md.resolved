@@ -1,0 +1,77 @@
+# Phase 5: Refinement & Expansion (The Notebook Evolution)
+
+アプリを「メモ帳」のモダンな進化系へと昇華させるためのフェーズです。視認性、操作性、そして書き心地を徹底的に追求します。
+
+## User Review Required
+> [!IMPORTANT]
+> **アーキテクチャ変更の可能性**: タブ実装（縦/横）に伴い、現在の単一ドキュメント管理から「Multi-Document Architecture」への移行設計が含まれます。これは将来的な大規模改修の布石となります。
+
+## Proposed Changes
+
+### 1. UI/UX Refinement (Notepad Base)
+Windowsの「メモ帳」をベースに、必要な情報を網羅しつつLunoらしいミニマルさを維持します。
+
+#### [MODIFY] Status Bar
+ステータスバーを拡張し、以下の情報を表示します。
+- **左側**: `行 X, 列 Y` | `Z 文字`
+- **右側**: `ズーム A%` | `Windows (CRLF)` | `UTF-8`
+
+#### [MODIFY] Markdown Behavior
+- **引用 (`>`) の適正化**: 
+  - 改行時は引用を継続。
+  - **修正点**: 空行で [Enter](file:///c:/Projects/Luno-Editor/Luno/Core/Editor/LunoEditor.cs#251-331) を押した際、引用を解除して通常段落に戻すロジックを追加。
+- **ハイパーリンク**: `Ctrl + Click` の挙動を再検証し、確実にブラウザが開くように修正。
+
+### 2. Theming (Luno 12 Palette)
+「紙のような質感」と「目の負担軽減」を両立する12色のテーマパレットを実装します。完全な黒(#000000)や白(#FFFFFF)は使用せず、目に優しい色調を採用します。
+
+| テーマ名 (和名) | 色調イメージ | 特徴 |
+| :--- | :--- | :--- |
+| **Kinari (生成)** | Off-White | デフォルトごく薄いクリーム色。目に刺さらない白。 |
+| **Sumi (墨)** | Dark Gray | デフォルト。完全な黒ではない深いグレー。 |
+| **Sakura (桜)** | Pale Pink | 春のような淡いピンク。 |
+| **Sora (空)** | Sky Blue | 爽やかな薄青色。 |
+| **Matcha (抹茶)** | Muted Green | 落ち着いた緑色。リラックス効果。 |
+| **Anzu (杏)** | Soft Orange | 温かみのある橙色。 |
+| **Fuji (藤)** | Light Purple | 上品な薄紫色。 |
+| **Kogane (黄金)** | Muted Gold | 紙の変色のようなアンティークな黄色。 |
+| **Nezumi (鼠)** | Neutral Gray | 無彩色のクールなグレー。 |
+| **Yoru (夜)** | Midnight Blue | 深い夜のような青。集中力向上。 |
+| **Koubai (紅梅)** | Reddish Purple | 華やかだが落ち着いた赤紫。 |
+| **Aizome (藍染)** | Deep Indigo | 日本の伝統的な濃い藍色。 |
+
+### 3. Tab Interface Design (Architectural)
+縦タブ（サイドバー）と横タブ（トップバー）の両立を目指した設計を導入します。
+
+#### Design Concept
+- **設定による切り替え**: ユーザー設定で `TabMode: Horizontal | Vertical` を選択可能に。
+- **Horizontal (Default)**: 
+  - ブラウザのような上部タブ。
+  - スペース効率重視。
+- **Vertical**: 
+  - 左側サイドバーにリスト表示。
+  - ワイドモニター向け。タイトルが長くても見やすい。
+  - グループ化やアイコン表示などのちの拡張性を確保。
+
+#### Implementation Strategy (Step-by-Step)
+1.  **Data Structure**: `TabItem` モデル（Content, FilePath, IsModified, Title）の作成。
+2.  **View**: `TabControl` をカスタマイズし、`TabStripPlacement` プロパティで縦横を切り替えられるようにする。
+3.  **Interaction**: `Ctrl+T` (新規), `Ctrl+W` (閉じる), `Ctrl+Tab` (切り替え) の実装。
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- 新規追加ロジック（引用解除など）のユニットテスト（可能であれば）。
+
+### Manual Verification
+1.  **ステータスバー**: 
+    - カーソル移動に合わせて「行」「列」「文字数」が正確に更新されるか。
+    - ズーム変更が即座に反映されるか。
+2.  **Markdown**:
+    - `> 引用` -> Enter -> `> (継続)` -> Enter (空行) -> [(解除)](file:///c:/Projects/Luno-Editor/Luno/Core/Persistence/SettingsManager.cs#49-71) のフロー確認。
+3.  **テーマ**:
+    - 12色すべてで文字の視認性が確保されているか。極端な低コントラストがないか。
+4.  **リンク**:
+    - URLの上にマウスを置いた時のカーソル変化と、Ctrl+クリックでのブラウザ起動。

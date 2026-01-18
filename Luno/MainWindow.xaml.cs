@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _statusUpdateTimer;
     private IntPtr _hwnd;
     private int _zoomLevel = 100;
+    private LunoPalette.LunoTheme _currentTheme = LunoPalette.Themes[0];
 
     public MainWindow()
     {
@@ -59,7 +60,24 @@ public partial class MainWindow : Window
     {
         _hwnd = new WindowInteropHelper(this).Handle;
         ApplySystemBackdrop();
-        ApplyTheme(_themeManager.IsDarkMode);
+
+        // 保存されたテーマを復元、なければOS設定に従う
+        if (!string.IsNullOrEmpty(_settingsManager.Settings.ThemeName))
+        {
+            _currentTheme = LunoPalette.GetTheme(_settingsManager.Settings.ThemeName);
+            ApplyLunoTheme(_currentTheme);
+        }
+        else
+        {
+            ApplyTheme(_themeManager.IsDarkMode);
+        }
+
+        // 保存されたズームレベルを復元
+        if (_settingsManager.Settings.ZoomLevel >= 50 && _settingsManager.Settings.ZoomLevel <= 200)
+        {
+            _zoomLevel = _settingsManager.Settings.ZoomLevel;
+            Editor.FontSize = 14.0 * (_zoomLevel / 100.0);
+        }
 
         // 保存されたウィンドウ位置を復元
         RestoreWindowState();
@@ -108,13 +126,29 @@ public partial class MainWindow : Window
     {
         try
         {
+            // テキスト情報
             var text = Editor.GetPlainText();
             var charCount = text.Length - text.Count(c => c == '\r' || c == '\n');
-            var lineCount = text.Split('\n').Length;
 
             CharCountText.Text = $"{charCount:N0} 文字";
-            LineCountText.Text = $"{lineCount:N0} 行";
             ZoomLevelText.Text = $"{_zoomLevel}%";
+
+            // カーソル位置
+            var caretPos = Editor.CaretPosition;
+            if (caretPos != null)
+            {
+                var lineStart = caretPos.GetLineStartPosition(0);
+                var column = lineStart != null 
+                    ? new System.Windows.Documents.TextRange(lineStart, caretPos).Text.Length + 1 
+                    : 1;
+                
+                // 行番号を計算
+                var docStart = Editor.Document.ContentStart;
+                var textBeforeCaret = new System.Windows.Documents.TextRange(docStart, caretPos).Text;
+                var line = textBeforeCaret.Count(c => c == '\n') + 1;
+
+                CursorPosText.Text = $"行 {line}, 列 {column}";
+            }
         }
         catch
         {
@@ -142,6 +176,7 @@ public partial class MainWindow : Window
 
             // エディタのフォントサイズを更新
             Editor.FontSize = 14.0 * (_zoomLevel / 100.0);
+            _settingsManager.Settings.ZoomLevel = _zoomLevel;
             UpdateStatusBar();
         }
     }
@@ -263,14 +298,22 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnThemeChanged(bool isDark)
     {
-        Dispatcher.Invoke(() => ApplyTheme(isDark));
+        // OSテーマが変わったらデフォルトテーマを適用（ユーザー指定がない場合）
+        if (string.IsNullOrEmpty(_settingsManager.Settings.ThemeName))
+        {
+            _currentTheme = LunoPalette.GetDefaultTheme(isDark);
+        }
+        Dispatcher.Invoke(() => ApplyLunoTheme(_currentTheme));
     }
 
     /// <summary>
-    /// テーマの適用（Light/Dark）
+    /// Lunoテーマを適用（12色パレット対応）
     /// </summary>
-    private void ApplyTheme(bool isDark)
+    private void ApplyLunoTheme(LunoPalette.LunoTheme theme)
     {
+        _currentTheme = theme;
+        var isDark = LunoPalette.IsDarkTheme(theme);
+
         if (NativeMethods.IsWindows11OrGreater())
         {
             int darkMode = isDark ? 1 : 0;
@@ -281,20 +324,44 @@ public partial class MainWindow : Window
                 Marshal.SizeOf<int>());
         }
 
-        var bgColor = LunoColors.GetBackgroundColor(isDark);
-        var textColor = LunoColors.GetTextColor(isDark);
-
-        Resources["BackgroundBrush"] = new SolidColorBrush(bgColor);
-        Resources["TextBrush"] = new SolidColorBrush(textColor);
-        Resources["EditorBackgroundBrush"] = new SolidColorBrush(
-            isDark ? Color.FromArgb(0x40, 0x00, 0x00, 0x00) : Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
+        // テーマ色を適用
+        Resources["BackgroundBrush"] = new SolidColorBrush(theme.Background);
+        Resources["TextBrush"] = new SolidColorBrush(theme.Text);
+        
+        // エディタ背景（半透明）
+        var editorBg = isDark 
+            ? Color.FromArgb(0x30, 0x00, 0x00, 0x00) 
+            : Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF);
+        Resources["EditorBackgroundBrush"] = new SolidColorBrush(editorBg);
 
         if (!NativeMethods.IsWindows11OrGreater())
         {
-            RootGrid.Background = new SolidColorBrush(bgColor);
+            RootGrid.Background = new SolidColorBrush(theme.Background);
         }
 
         Editor.ApplyTheme(isDark);
+        
+        // 設定に保存
+        _settingsManager.Settings.ThemeName = theme.Name;
+    }
+
+    /// <summary>
+    /// テーマの適用（Light/Dark）- 後方互換
+    /// </summary>
+    private void ApplyTheme(bool isDark)
+    {
+        var theme = LunoPalette.GetDefaultTheme(isDark);
+        ApplyLunoTheme(theme);
+    }
+
+    /// <summary>
+    /// 次のテーマに切り替え (Ctrl+Shift+T)
+    /// </summary>
+    private void CycleNextTheme()
+    {
+        var currentIndex = Array.IndexOf(LunoPalette.Themes, _currentTheme);
+        var nextIndex = (currentIndex + 1) % LunoPalette.Themes.Length;
+        ApplyLunoTheme(LunoPalette.Themes[nextIndex]);
     }
 
     #region Window Control Buttons
@@ -330,7 +397,15 @@ public partial class MainWindow : Window
     {
         base.OnKeyDown(e);
 
-        if (e.Key == System.Windows.Input.Key.F && 
+        // Ctrl+Shift+T: テーマ切り替え
+        if (e.Key == System.Windows.Input.Key.T && 
+            System.Windows.Input.Keyboard.Modifiers == (System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift))
+        {
+            e.Handled = true;
+            CycleNextTheme();
+        }
+        // Ctrl+F: 検索バー
+        else if (e.Key == System.Windows.Input.Key.F && 
             System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control))
         {
             e.Handled = true;

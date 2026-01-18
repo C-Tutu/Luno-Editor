@@ -307,10 +307,24 @@ public partial class LunoEditor : RichTextBox
                 return;
             }
 
-            // 引用継続
+            // 引用継続（空なら解除）
             if (tag == "Quote")
             {
                 e.Handled = true;
+                var currentText = new TextRange(para.ContentStart, para.ContentEnd).Text;
+                
+                // 空行なら引用を解除して通常段落に
+                if (string.IsNullOrWhiteSpace(currentText))
+                {
+                    // 現在の空の引用段落を通常に変更
+                    para.FontStyle = FontStyles.Normal;
+                    para.Foreground = _defaultBrush;
+                    para.Margin = new Thickness(0);
+                    para.Tag = null;
+                    return;
+                }
+                
+                // 内容がある場合は引用を継続
                 var newPara = new Paragraph()
                 {
                     FontStyle = FontStyles.Italic,
