@@ -241,16 +241,42 @@
                             Background="Transparent"
                             BorderThickness="0"
                             Padding="0"
-                            Margin="0,-32,0,0"
+                            Margin="0,-38,0,0"
                             SelectionChanged="MainTabControl_SelectionChanged">
+                    <TabControl.Template>
+                        <ControlTemplate TargetType="TabControl">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <!-- Tab Header Panel with Margins to avoid overlapping Title and Window Controls -->
+                                <!-- Left: Title(~50) + NewTab(~40) -> ~100. Right: Controls(~140) -> ~140 -->
+                                <TabPanel x:Name="HeaderPanel" 
+                                          Grid.Row="0" 
+                                          Panel.ZIndex="1" 
+                                          Margin="100,0,150,0" 
+                                          IsItemsHost="True" 
+                                          Background="Transparent"/>
+                                <Border x:Name="ContentPanel" 
+                                        Grid.Row="1" 
+                                        Background="{TemplateBinding Background}" 
+                                        BorderBrush="{TemplateBinding BorderBrush}" 
+                                        BorderThickness="{TemplateBinding BorderThickness}">
+                                    <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/>
+                                </Border>
+                            </Grid>
+                        </ControlTemplate>
+                    </TabControl.Template>
                     <TabControl.Resources>
                         <Style TargetType="TabItem">
                             <Setter Property="Background" Value="Transparent"/>
                             <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
                             <Setter Property="BorderThickness" Value="0"/>
-                            <Setter Property="Margin" Value="0"/>
-                            <Setter Property="Padding" Value="12,6"/>
+                            <Setter Property="Margin" Value="0,0,0,0"/>
+                            <Setter Property="Padding" Value="10,6"/>
                             <Setter Property="Height" Value="32"/>
+                            <Setter Property="VerticalAlignment" Value="Bottom"/>
                             <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
                             <Setter Property="Template">
                                 <Setter.Value>
@@ -259,23 +285,46 @@
                                             <Border x:Name="Border" 
                                                     CornerRadius="4,4,0,0" 
                                                     Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                                    BorderBrush="Transparent"
+                                                    BorderThickness="0"
+                                                    Margin="0,0,1,0">
                                                 <StackPanel Orientation="Horizontal" Margin="{TemplateBinding Padding}">
-                                                    <TextBlock Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" 
-                                                               Foreground="{TemplateBinding Foreground}"
-                                                               VerticalAlignment="Center"/>
-                                                    <Button x:Name="CloseTabButton" 
-                                                            Content="&#xE711;" 
+                                                    <TextBlock Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}"
+                                                               VerticalAlignment="Center"
+                                                               FontSize="12"/>
+                                                    <!-- Close Tab Button -->
+                                                    <Button x:Name="CloseTabButton"
+                                                            Content="&#xE711;"
                                                             FontFamily="Segoe Fluent Icons"
                                                             FontSize="10"
                                                             Width="16" Height="16"
                                                             Margin="8,0,-4,0"
+                                                            Padding="0"
                                                             Background="Transparent"
                                                             BorderThickness="0"
+                                                            Foreground="{TemplateBinding Foreground}"
                                                             Click="CloseTabButton_Click"
                                                             Visibility="Collapsed"
-                                                            Foreground="{TemplateBinding Foreground}"/>
+                                                            WindowChrome.IsHitTestVisibleInChrome="True">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button">
+                                                                <Setter Property="Template">
+                                                                    <Setter.Value>
+                                                                        <ControlTemplate TargetType="Button">
+                                                                            <Border Background="{TemplateBinding Background}" CornerRadius="2">
+                                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                            </Border>
+                                                                        </ControlTemplate>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                                <Style.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter Property="Background" Value="#20808080"/>
+                                                                    </Trigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
                                                 </StackPanel>
                                             </Border>
                                         </Grid>
@@ -284,17 +333,26 @@
                                                 <Setter TargetName="Border" Property="Background" Value="{DynamicResource EditorBackgroundBrush}"/>
                                                 <Setter TargetName="CloseTabButton" Property="Visibility" Value="Visible"/>
                                                 <Setter Property="FontWeight" Value="SemiBold"/>
+                                                <Setter Property="Panel.ZIndex" Value="10"/>
                                             </Trigger>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="CloseTabButton" Property="Visibility" Value="Visible"/>
-                                                <Setter TargetName="Border" Property="Background" Value="#20808080"/>
+                                                <Setter TargetName="Border" Property="Background" Value="#10808080"/>
                                             </Trigger>
+                                            <MultiTrigger>
+                                                <MultiTrigger.Conditions>
+                                                    <Condition Property="IsSelected" Value="False"/>
+                                                    <Condition Property="IsMouseOver" Value="True"/>
+                                                </MultiTrigger.Conditions>
+                                                <Setter TargetName="Border" Property="Background" Value="#15808080"/>
+                                            </MultiTrigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
                         </Style>
-                    </TabControl.Resources>
+                    </TabControl.Resources> 
+
                     <!-- Tabs will be added in code-behind -->
                 </TabControl>
             </Border>
