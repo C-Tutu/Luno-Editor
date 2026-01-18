@@ -152,11 +152,11 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
 
-            if (e.Delta > 0 && _zoomLevel < 200)
+            if (e.Delta > 0 && _zoomLevel < 500)
             {
                 _zoomLevel += 10;
             }
-            else if (e.Delta < 0 && _zoomLevel > 50)
+            else if (e.Delta < 0 && _zoomLevel > 10)
             {
                 _zoomLevel -= 10;
             }
@@ -294,7 +294,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Lunoテーマを適用（12色パレット対応）
+    /// Lunoテーマを適用（12色パレット対応・統一カラー）
     /// </summary>
     private void ApplyLunoTheme(LunoPalette.LunoTheme theme)
     {
@@ -311,20 +311,16 @@ public partial class MainWindow : Window
                 Marshal.SizeOf<int>());
         }
 
-        // テーマ色を適用
-        Resources["BackgroundBrush"] = new SolidColorBrush(theme.Background);
-        Resources["TextBrush"] = new SolidColorBrush(theme.Text);
-        
-        // エディタ背景（半透明）
-        var editorBg = isDark 
-            ? Color.FromArgb(0x30, 0x00, 0x00, 0x00) 
-            : Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF);
-        Resources["EditorBackgroundBrush"] = new SolidColorBrush(editorBg);
+        var bgBrush = new SolidColorBrush(theme.Background);
+        var textBrush = new SolidColorBrush(theme.Text);
 
-        if (!NativeMethods.IsWindows11OrGreater())
-        {
-            RootGrid.Background = new SolidColorBrush(theme.Background);
-        }
+        // 統一カラーを適用
+        Resources["BackgroundBrush"] = bgBrush;
+        Resources["TextBrush"] = textBrush;
+        Resources["EditorBackgroundBrush"] = bgBrush; // 透明なしで統一
+
+        // RootGridに直接背景色を適用（全システム共通）
+        RootGrid.Background = bgBrush;
 
         Editor.ApplyTheme(isDark);
         
@@ -361,7 +357,7 @@ public partial class MainWindow : Window
     /// </summary>
     public void SetZoomLevel(int level)
     {
-        if (level < 50 || level > 200) return;
+        if (level < 10 || level > 500) return;
         _zoomLevel = level;
         Editor.FontSize = 14.0 * (_zoomLevel / 100.0);
         _settingsManager.Settings.ZoomLevel = _zoomLevel;

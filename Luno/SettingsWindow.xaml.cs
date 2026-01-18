@@ -35,7 +35,8 @@ public partial class SettingsWindow : Window
         CreateThemeButtons();
         
         // ズーム設定
-        ZoomSlider.Value = Core.Persistence.SettingsManager.Instance.Settings.ZoomLevel;
+        var savedZoom = Core.Persistence.SettingsManager.Instance.Settings.ZoomLevel;
+        ZoomSlider.Value = savedZoom >= 10 && savedZoom <= 500 ? savedZoom : 100;
         UpdateZoomText();
         
         _isInitialized = true;
@@ -46,14 +47,16 @@ public partial class SettingsWindow : Window
     /// </summary>
     private void ApplyWindowTheme(LunoPalette.LunoTheme theme)
     {
-        RootBorder.Background = new SolidColorBrush(theme.Background);
-        RootBorder.Tag = new SolidColorBrush(theme.Text); // TextBrush用
+        var bgBrush = new SolidColorBrush(theme.Background);
+        var textBrush = new SolidColorBrush(theme.Text);
         
-        // 全TextBlockにテーマを適用
-        foreach (var tb in FindVisualChildren<TextBlock>(this))
-        {
-            tb.Foreground = new SolidColorBrush(theme.Text);
-        }
+        RootBorder.Background = bgBrush;
+        TitleBarBorder.Background = bgBrush;
+        
+        TitleText.Foreground = textBrush;
+        ThemeLabel.Foreground = textBrush;
+        ZoomLabel.Foreground = textBrush;
+        ZoomValueText.Foreground = textBrush;
     }
 
     /// <summary>
@@ -67,8 +70,8 @@ public partial class SettingsWindow : Window
         {
             var button = new Button
             {
-                Width = 36,
-                Height = 36,
+                Width = 40,
+                Height = 40,
                 Margin = new Thickness(4),
                 Padding = new Thickness(0),
                 Background = Brushes.Transparent,
@@ -81,12 +84,12 @@ public partial class SettingsWindow : Window
             // 円形のコンテンツ
             var ellipse = new Ellipse
             {
-                Width = 28,
-                Height = 28,
+                Width = 32,
+                Height = 32,
                 Fill = new SolidColorBrush(theme.Background),
                 Stroke = theme == _selectedTheme 
-                    ? new SolidColorBrush(theme.Text) 
-                    : new SolidColorBrush(Color.FromArgb(80, 128, 128, 128)),
+                    ? Brushes.White
+                    : new SolidColorBrush(Color.FromArgb(100, 128, 128, 128)),
                 StrokeThickness = theme == _selectedTheme ? 3 : 1
             };
             button.Content = ellipse;
@@ -97,12 +100,21 @@ public partial class SettingsWindow : Window
             // ホバーエフェクト
             button.MouseEnter += (s, e) =>
             {
-                if (button.Content is Ellipse el) el.StrokeThickness = 2;
+                if (button.Content is Ellipse el) 
+                {
+                    el.StrokeThickness = 2;
+                    el.Stroke = Brushes.White;
+                }
             };
             button.MouseLeave += (s, e) =>
             {
                 if (button.Content is Ellipse el && button.Tag is LunoPalette.LunoTheme t)
+                {
+                    el.Stroke = t == _selectedTheme 
+                        ? Brushes.White
+                        : new SolidColorBrush(Color.FromArgb(100, 128, 128, 128));
                     el.StrokeThickness = t == _selectedTheme ? 3 : 1;
+                }
             };
 
             ThemeButtonsPanel.Children.Add(button);
@@ -123,8 +135,8 @@ public partial class SettingsWindow : Window
                 if (b.Content is Ellipse el && b.Tag is LunoPalette.LunoTheme t)
                 {
                     el.Stroke = t == _selectedTheme 
-                        ? new SolidColorBrush(t.Text) 
-                        : new SolidColorBrush(Color.FromArgb(80, 128, 128, 128));
+                        ? Brushes.White
+                        : new SolidColorBrush(Color.FromArgb(100, 128, 128, 128));
                     el.StrokeThickness = t == _selectedTheme ? 3 : 1;
                 }
             }
@@ -146,19 +158,5 @@ public partial class SettingsWindow : Window
     private void UpdateZoomText()
     {
         ZoomValueText.Text = $"{(int)ZoomSlider.Value}%";
-    }
-
-    /// <summary>
-    /// ビジュアルツリーから特定の型の子要素を検索
-    /// </summary>
-    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
-    {
-        if (parent == null) yield break;
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T t) yield return t;
-            foreach (var c in FindVisualChildren<T>(child)) yield return c;
-        }
     }
 }
