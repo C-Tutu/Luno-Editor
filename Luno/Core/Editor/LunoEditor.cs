@@ -13,30 +13,27 @@ using Luno.Core.Theming;
 /// Luno Markdown (LMD) 対応のエディタコントロール
 /// 軽量なハイライト処理に特化（AST構築なし）
 /// 装飾は表示時のみ、保存はプレーンテキスト
+/// メモ帳として視認性を重視したスタイリング
 /// </summary>
 public partial class LunoEditor : RichTextBox
 {
-    // Markdownパターン（正規表現）
-    private static readonly Regex HeaderPattern = new(@"^(#{1,6})\s+(.*)$", RegexOptions.Compiled);
-    private static readonly Regex ListPattern = new(@"^(\s*)([-*+]|\d+\.)\s+(.*)$", RegexOptions.Compiled);
-    private static readonly Regex QuotePattern = new(@"^>\s+(.*)$", RegexOptions.Compiled);
+    // Markdownパターン（正規表現）- より安全なパターン
+    private static readonly Regex HeaderPattern = new(@"^(#{1,6})\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex ListPattern = new(@"^(\s*)([-*+]|\d+\.)\s(.*)$", RegexOptions.Compiled);
+    private static readonly Regex QuotePattern = new(@"^>\s(.*)$", RegexOptions.Compiled);
     private static readonly Regex UrlPattern = new(@"https?://[^\s<>""]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex BoldPattern = new(@"\*\*(.+?)\*\*", RegexOptions.Compiled);
-    private static readonly Regex ItalicPattern = new(@"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", RegexOptions.Compiled);
 
     private bool _isUpdating;
-    private bool _isDarkMode;
     private readonly DispatcherTimer _highlightTimer;
     private const double BaseFontSize = 14.0;
 
     // テーマカラーブラシ（キャッシュ）
     private SolidColorBrush _defaultBrush = new(LunoColors.TextLight);
-    private static readonly SolidColorBrush ListMarkerBrush = new(LunoColors.AccentGreen);
-    private static readonly SolidColorBrush QuoteBrush = new(LunoColors.TextMuted);
-    private static readonly SolidColorBrush UrlBrush = new(LunoColors.AccentBlue);
+    private SolidColorBrush _mutedBrush = new(LunoColors.TextMuted);
 
-    // ヘッダーサイズ倍率（H1=2.0倍、H2=1.75倍 ... H6=1.1倍）
-    private static readonly double[] HeaderSizeMultipliers = { 2.0, 1.75, 1.5, 1.35, 1.2, 1.1 };
+    // ヘッダーサイズ倍率（H1=1.8倍、H2=1.5倍 ... H6=1.05倍）
+    private static readonly double[] HeaderSizeMultipliers = { 1.8, 1.5, 1.3, 1.2, 1.1, 1.05 };
 
     public LunoEditor()
     {
@@ -55,7 +52,7 @@ public partial class LunoEditor : RichTextBox
         // ハイライト用タイマー（入力後遅延実行）
         _highlightTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(200)
+            Interval = TimeSpan.FromMilliseconds(250)
         };
         _highlightTimer.Tick += OnHighlightTimerTick;
 
@@ -69,11 +66,6 @@ public partial class LunoEditor : RichTextBox
             PagePadding = new Thickness(0),
             LineHeight = 1.5
         };
-
-        // ブラシをFreeze（パフォーマンス向上）
-        ListMarkerBrush.Freeze();
-        QuoteBrush.Freeze();
-        UrlBrush.Freeze();
     }
 
     /// <summary>
@@ -81,10 +73,11 @@ public partial class LunoEditor : RichTextBox
     /// </summary>
     public void ApplyTheme(bool isDark)
     {
-        _isDarkMode = isDark;
         Background = Brushes.Transparent;
         _defaultBrush = new SolidColorBrush(LunoColors.GetTextColor(isDark));
         _defaultBrush.Freeze();
+        _mutedBrush = new SolidColorBrush(LunoColors.TextMuted);
+        _mutedBrush.Freeze();
         Foreground = _defaultBrush;
         CaretBrush = Foreground;
 
@@ -140,11 +133,12 @@ public partial class LunoEditor : RichTextBox
 
         try
         {
-            foreach (var block in Document.Blocks.ToList())
+            var blocks = Document.Blocks.ToArray();
+            foreach (var block in blocks)
             {
                 if (block is Paragraph para)
                 {
-                    HighlightParagraphInternal(para);
+                    HighlightParagraphSafe(para);
                 }
             }
         }
@@ -166,11 +160,7 @@ public partial class LunoEditor : RichTextBox
         _isUpdating = true;
         try
         {
-            HighlightParagraphInternal(para);
-        }
-        catch
-        {
-            // ハイライト失敗は静かに無視
+            HighlightParagraphSafe(para);
         }
         finally
         {
@@ -179,70 +169,80 @@ public partial class LunoEditor : RichTextBox
     }
 
     /// <summary>
-    /// 段落ハイライトの内部実装
+    /// 段落ハイライトの安全な実装
     /// </summary>
-    private void HighlightParagraphInternal(Paragraph para)
+    private void HighlightParagraphSafe(Paragraph para)
     {
-        // 段落のテキストを取得
-        var range = new TextRange(para.ContentStart, para.ContentEnd);
-        var text = range.Text;
-
-        if (string.IsNullOrEmpty(text)) return;
-
-        // まずデフォルトスタイルにリセット
-        range.ApplyPropertyValue(TextElement.ForegroundProperty, _defaultBrush);
-        range.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Normal);
-        range.ApplyPropertyValue(TextElement.FontStyleProperty, FontStyles.Normal);
-        range.ApplyPropertyValue(TextElement.FontSizeProperty, BaseFontSize);
-        range.ApplyPropertyValue(Inline.TextDecorationsProperty, null);
-
-        // ヘッダーパターン（フォントサイズ変更）
-        var headerMatch = HeaderPattern.Match(text);
-        if (headerMatch.Success)
+        try
         {
-            var level = headerMatch.Groups[1].Length; // #の数 (1-6)
-            var sizeMultiplier = HeaderSizeMultipliers[Math.Min(level - 1, 5)];
-            var headerSize = BaseFontSize * sizeMultiplier;
+            // 段落のテキストを取得
+            var range = new TextRange(para.ContentStart, para.ContentEnd);
+            var text = range.Text;
 
-            range.ApplyPropertyValue(TextElement.FontSizeProperty, headerSize);
-            range.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Bold);
-            return; // ヘッダー行は他のパターンを無視
+            // 空または短すぎる場合はスキップ
+            if (string.IsNullOrEmpty(text) || text.Length < 1) return;
+
+            // まずデフォルトスタイルにリセット
+            range.ApplyPropertyValue(TextElement.ForegroundProperty, _defaultBrush);
+            range.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Normal);
+            range.ApplyPropertyValue(TextElement.FontStyleProperty, FontStyles.Normal);
+            range.ApplyPropertyValue(TextElement.FontSizeProperty, BaseFontSize);
+
+            // ヘッダーパターン（フォントサイズ＋太字）
+            var headerMatch = HeaderPattern.Match(text);
+            if (headerMatch.Success && headerMatch.Groups[1].Length > 0)
+            {
+                var level = Math.Min(headerMatch.Groups[1].Length, 6);
+                var sizeMultiplier = HeaderSizeMultipliers[level - 1];
+                var headerSize = BaseFontSize * sizeMultiplier;
+
+                range.ApplyPropertyValue(TextElement.FontSizeProperty, headerSize);
+                range.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Bold);
+                return;
+            }
+
+            // 引用パターン（斜体のみ、色変更なし）
+            var quoteMatch = QuotePattern.Match(text);
+            if (quoteMatch.Success)
+            {
+                range.ApplyPropertyValue(TextElement.FontStyleProperty, FontStyles.Italic);
+                range.ApplyPropertyValue(TextElement.ForegroundProperty, _mutedBrush);
+                return;
+            }
+
+            // リストパターン - マーカー部分を太字に（視認性向上）
+            var listMatch = ListPattern.Match(text);
+            if (listMatch.Success && listMatch.Groups[2].Success)
+            {
+                var markerGroup = listMatch.Groups[2];
+                if (markerGroup.Length > 0 && markerGroup.Index >= 0)
+                {
+                    // リスト全体は通常スタイル、マーカーのみ太字
+                    ApplyStyleSafe(para, markerGroup.Index, markerGroup.Length, fontWeight: FontWeights.Bold);
+                }
+            }
+
+            // URLパターン（下線のみ、色変更なし）
+            foreach (Match urlMatch in UrlPattern.Matches(text))
+            {
+                if (urlMatch.Success && urlMatch.Length > 0)
+                {
+                    ApplyStyleSafe(para, urlMatch.Index, urlMatch.Length, textDecorations: TextDecorations.Underline);
+                }
+            }
+
+            // 太字パターン
+            foreach (Match boldMatch in BoldPattern.Matches(text))
+            {
+                if (boldMatch.Success && boldMatch.Length > 0)
+                {
+                    ApplyStyleSafe(para, boldMatch.Index, boldMatch.Length, fontWeight: FontWeights.Bold);
+                }
+            }
         }
-
-        // 引用パターン
-        var quoteMatch = QuotePattern.Match(text);
-        if (quoteMatch.Success)
+        catch
         {
-            range.ApplyPropertyValue(TextElement.ForegroundProperty, QuoteBrush);
-            range.ApplyPropertyValue(TextElement.FontStyleProperty, FontStyles.Italic);
-            return;
-        }
-
-        // リストパターン（マーカー部分のみ色変更）
-        var listMatch = ListPattern.Match(text);
-        if (listMatch.Success && listMatch.Groups[2].Length > 0)
-        {
-            var markerStart = listMatch.Groups[1].Length;
-            var markerLength = listMatch.Groups[2].Length;
-            ApplyStyleSafe(para, markerStart, markerLength + 1, ListMarkerBrush);
-        }
-
-        // URLパターン
-        foreach (Match urlMatch in UrlPattern.Matches(text))
-        {
-            ApplyStyleSafe(para, urlMatch.Index, urlMatch.Length, UrlBrush, textDecorations: TextDecorations.Underline);
-        }
-
-        // 太字パターン
-        foreach (Match boldMatch in BoldPattern.Matches(text))
-        {
-            ApplyStyleSafe(para, boldMatch.Index, boldMatch.Length, fontWeight: FontWeights.Bold);
-        }
-
-        // 斜体パターン
-        foreach (Match italicMatch in ItalicPattern.Matches(text))
-        {
-            ApplyStyleSafe(para, italicMatch.Index, italicMatch.Length, fontStyle: FontStyles.Italic);
+            // 例外は静かに無視
         }
     }
 
@@ -260,7 +260,8 @@ public partial class LunoEditor : RichTextBox
     {
         try
         {
-            if (length <= 0) return;
+            // 境界チェック
+            if (length <= 0 || startIndex < 0) return;
 
             var start = GetTextPointerAtOffset(para.ContentStart, startIndex);
             var end = GetTextPointerAtOffset(para.ContentStart, startIndex + length);
@@ -290,34 +291,47 @@ public partial class LunoEditor : RichTextBox
     /// </summary>
     private static TextPointer? GetTextPointerAtOffset(TextPointer start, int offset)
     {
-        if (offset <= 0) return start;
-
-        var current = start;
-        int count = 0;
-
-        while (current != null)
+        try
         {
-            var context = current.GetPointerContext(LogicalDirection.Forward);
+            if (offset <= 0) return start;
 
-            if (context == TextPointerContext.Text)
+            var current = start;
+            int count = 0;
+
+            while (current != null)
             {
-                var runLength = current.GetTextRunLength(LogicalDirection.Forward);
-                var remaining = offset - count;
+                var context = current.GetPointerContext(LogicalDirection.Forward);
 
-                if (remaining <= runLength)
+                if (context == TextPointerContext.Text)
                 {
-                    return current.GetPositionAtOffset(remaining);
+                    var runLength = current.GetTextRunLength(LogicalDirection.Forward);
+                    if (runLength <= 0)
+                    {
+                        current = current.GetNextContextPosition(LogicalDirection.Forward);
+                        continue;
+                    }
+
+                    var remaining = offset - count;
+
+                    if (remaining <= runLength)
+                    {
+                        return current.GetPositionAtOffset(remaining);
+                    }
+
+                    count += runLength;
                 }
 
-                count += runLength;
+                var next = current.GetNextContextPosition(LogicalDirection.Forward);
+                if (next == null) break;
+                current = next;
             }
 
-            var next = current.GetNextContextPosition(LogicalDirection.Forward);
-            if (next == null) break;
-            current = next;
+            return current;
         }
-
-        return current;
+        catch
+        {
+            return null;
+        }
     }
 
     #endregion
@@ -341,51 +355,59 @@ public partial class LunoEditor : RichTextBox
     /// </summary>
     private void HandleEnterKey(KeyEventArgs e)
     {
-        var caretPosition = CaretPosition;
-        var lineStart = caretPosition?.GetLineStartPosition(0);
-        
-        if (lineStart == null || caretPosition == null) return;
-
-        var lineText = new TextRange(lineStart, caretPosition).Text;
-
-        // リスト継続パターンの検出
-        var listMatch = ListPattern.Match(lineText);
-        if (listMatch.Success)
+        try
         {
-            var indent = listMatch.Groups[1].Value;
-            var marker = listMatch.Groups[2].Value;
-            var content = listMatch.Groups[3].Value;
-
-            // 空のリスト項目なら終了
-            if (string.IsNullOrWhiteSpace(content))
-            {
-                return;
-            }
-
-            // 次のリスト項目を自動挿入
-            e.Handled = true;
+            var caretPosition = CaretPosition;
+            var lineStart = caretPosition?.GetLineStartPosition(0);
             
-            string nextMarker = marker;
-            if (int.TryParse(marker.TrimEnd('.'), out int num))
-            {
-                nextMarker = $"{num + 1}.";
-            }
+            if (lineStart == null || caretPosition == null) return;
 
-            var newLine = $"\n{indent}{nextMarker} ";
-            caretPosition.InsertTextInRun(newLine);
-            CaretPosition = caretPosition.GetPositionAtOffset(newLine.Length);
-        }
-        else
-        {
-            // 通常のインデント継続
-            var leadingWhitespace = GetLeadingWhitespace(lineText);
-            if (!string.IsNullOrEmpty(leadingWhitespace))
+            var lineText = new TextRange(lineStart, caretPosition).Text;
+            if (string.IsNullOrEmpty(lineText)) return;
+
+            // リスト継続パターンの検出
+            var listMatch = ListPattern.Match(lineText);
+            if (listMatch.Success && listMatch.Groups[2].Success)
             {
+                var indent = listMatch.Groups[1].Value;
+                var marker = listMatch.Groups[2].Value;
+                var content = listMatch.Groups.Count > 3 ? listMatch.Groups[3].Value : "";
+
+                // 空のリスト項目なら終了
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    return;
+                }
+
+                // 次のリスト項目を自動挿入
                 e.Handled = true;
-                var newLine = $"\n{leadingWhitespace}";
+                
+                string nextMarker = marker;
+                if (int.TryParse(marker.TrimEnd('.'), out int num))
+                {
+                    nextMarker = $"{num + 1}.";
+                }
+
+                var newLine = $"\n{indent}{nextMarker} ";
                 caretPosition.InsertTextInRun(newLine);
                 CaretPosition = caretPosition.GetPositionAtOffset(newLine.Length);
             }
+            else
+            {
+                // 通常のインデント継続
+                var leadingWhitespace = GetLeadingWhitespace(lineText);
+                if (!string.IsNullOrEmpty(leadingWhitespace))
+                {
+                    e.Handled = true;
+                    var newLine = $"\n{leadingWhitespace}";
+                    caretPosition.InsertTextInRun(newLine);
+                    CaretPosition = caretPosition.GetPositionAtOffset(newLine.Length);
+                }
+            }
+        }
+        catch
+        {
+            // エラーは無視
         }
     }
 
@@ -394,17 +416,24 @@ public partial class LunoEditor : RichTextBox
     /// </summary>
     private void HandleTabKey(KeyEventArgs e)
     {
-        e.Handled = true;
+        try
+        {
+            e.Handled = true;
 
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
-        {
-            // Shift+Tab: アンインデント（将来実装）
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                // Shift+Tab: アンインデント（将来実装）
+            }
+            else
+            {
+                // Tab: スペース挿入（2スペース）
+                CaretPosition?.InsertTextInRun("  ");
+                CaretPosition = CaretPosition?.GetPositionAtOffset(2);
+            }
         }
-        else
+        catch
         {
-            // Tab: スペース挿入（2スペース）
-            CaretPosition?.InsertTextInRun("  ");
-            CaretPosition = CaretPosition?.GetPositionAtOffset(2);
+            // エラーは無視
         }
     }
 
@@ -432,21 +461,28 @@ public partial class LunoEditor : RichTextBox
     {
         base.OnMouseLeftButtonUp(e);
 
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        try
         {
-            var position = e.GetPosition(this);
-            var textPointer = GetPositionFromPoint(position, true);
-
-            if (textPointer != null)
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
             {
-                var wordRange = GetWordRange(textPointer);
-                var word = wordRange?.Text ?? "";
+                var position = e.GetPosition(this);
+                var textPointer = GetPositionFromPoint(position, true);
 
-                if (UrlPattern.IsMatch(word))
+                if (textPointer != null)
                 {
-                    OpenUrl(word);
+                    var wordRange = GetWordRange(textPointer);
+                    var word = wordRange?.Text ?? "";
+
+                    if (UrlPattern.IsMatch(word))
+                    {
+                        OpenUrl(word);
+                    }
                 }
             }
+        }
+        catch
+        {
+            // エラーは無視
         }
     }
 
@@ -499,15 +535,22 @@ public partial class LunoEditor : RichTextBox
         {
             Document.Blocks.Clear();
             
-            // 行ごとに段落を作成
-            var lines = text.Split('\n');
-            foreach (var line in lines)
+            if (string.IsNullOrEmpty(text))
             {
-                var para = new Paragraph(new Run(line.TrimEnd('\r')))
+                Document.Blocks.Add(new Paragraph(new Run("")) { Margin = new Thickness(0) });
+            }
+            else
+            {
+                // 行ごとに段落を作成
+                var lines = text.Split('\n');
+                foreach (var line in lines)
                 {
-                    Margin = new Thickness(0)
-                };
-                Document.Blocks.Add(para);
+                    var para = new Paragraph(new Run(line.TrimEnd('\r')))
+                    {
+                        Margin = new Thickness(0)
+                    };
+                    Document.Blocks.Add(para);
+                }
             }
         }
         finally
