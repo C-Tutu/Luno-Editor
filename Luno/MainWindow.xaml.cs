@@ -18,7 +18,6 @@ public partial class MainWindow : Window
     private readonly ThemeManager _themeManager;
     private readonly SettingsManager _settingsManager;
     private readonly DispatcherTimer _autoSaveTimer;
-    private readonly DispatcherTimer _statusUpdateTimer;
     private IntPtr _hwnd;
     private int _zoomLevel = 100;
     private LunoPalette.LunoTheme _currentTheme = LunoPalette.Themes[0];
@@ -38,13 +37,6 @@ public partial class MainWindow : Window
             Interval = TimeSpan.FromSeconds(3)
         };
         _autoSaveTimer.Tick += OnAutoSaveTick;
-
-        // ステータスバー更新タイマー（500ms間隔）
-        _statusUpdateTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(500)
-        };
-        _statusUpdateTimer.Tick += OnStatusUpdateTick;
 
         // ウィンドウハンドル取得後にMica効果を適用
         SourceInitialized += OnSourceInitialized;
@@ -102,7 +94,10 @@ public partial class MainWindow : Window
 
         // タイマー開始
         _autoSaveTimer.Start();
-        _statusUpdateTimer.Start();
+
+        // リアルタイムステータス更新用イベント
+        Editor.SelectionChanged += (s, e) => UpdateStatusBar();
+        Editor.TextChanged += (s, e) => UpdateStatusBar();
 
         // 初回ステータス更新
         UpdateStatusBar();
@@ -112,15 +107,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// ステータスバー更新タイマーハンドラ
-    /// </summary>
-    private void OnStatusUpdateTick(object? sender, EventArgs e)
-    {
-        UpdateStatusBar();
-    }
-
-    /// <summary>
-    /// ステータスバーの情報を更新
+    /// ステータスバーの情報を更新（リアルタイム）
     /// </summary>
     private void UpdateStatusBar()
     {
@@ -574,7 +561,6 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _autoSaveTimer.Stop();
-        _statusUpdateTimer.Stop();
         _themeManager.ThemeChanged -= OnThemeChanged;
         base.OnClosed(e);
     }

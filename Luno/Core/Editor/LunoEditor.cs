@@ -42,6 +42,7 @@ public partial class LunoEditor : RichTextBox
         // イベント登録
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
+        TextChanged += OnTextChanged;
 
         // 初期ドキュメント設定
         Document = new FlowDocument
@@ -71,10 +72,10 @@ public partial class LunoEditor : RichTextBox
     {
         if (_isUpdating) return;
 
-        // スペースまたはエンターでMarkdown適用をチェック
+        // スペースまたはエンターで行頭Markdown適用をチェック
         if (e.Key == Key.Space || e.Key == Key.Enter)
         {
-            if (TryApplyMarkdownFormat(e.Key))
+            if (TryApplyBlockMarkdownFormat())
             {
                 if (e.Key == Key.Space)
                 {
@@ -96,10 +97,18 @@ public partial class LunoEditor : RichTextBox
     }
 
     /// <summary>
-    /// 現在行のMarkdown記法を検出し、書式を適用
-    /// 記号を削除し、書式のみを残す
+    /// テキスト変更時にインラインMarkdownを検出・適用
     /// </summary>
-    private bool TryApplyMarkdownFormat(Key triggerKey)
+    private void OnTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isUpdating) return;
+        TryApplyInlineMarkdown();
+    }
+
+    /// <summary>
+    /// 行頭Markdown記法を検出し、書式を適用（ヘッダー、リスト、引用）
+    /// </summary>
+    private bool TryApplyBlockMarkdownFormat()
     {
         try
         {
@@ -142,15 +151,9 @@ public partial class LunoEditor : RichTextBox
             }
 
             // 引用: >
-            if (lineText.TrimStart().StartsWith(">"))
+            if (lineText.Trim() == ">")
             {
                 ApplyQuoteFormat(para, lineStart, caretPos);
-                return true;
-            }
-
-            // Inline Formatting
-            if (TryApplyInlineFormat(para, lineText))
-            {
                 return true;
             }
 
@@ -159,6 +162,30 @@ public partial class LunoEditor : RichTextBox
         catch
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// テキスト変更時にインラインMarkdownを検出・適用
+    /// </summary>
+    private void TryApplyInlineMarkdown()
+    {
+        try
+        {
+            var caretPos = CaretPosition;
+            if (caretPos == null) return;
+
+            var para = caretPos.Paragraph;
+            if (para == null) return;
+
+            var text = new TextRange(para.ContentStart, para.ContentEnd).Text;
+            if (string.IsNullOrEmpty(text)) return;
+
+            TryApplyInlineFormat(para, text);
+        }
+        catch
+        {
+            // エラーは無視
         }
     }
 
@@ -193,10 +220,11 @@ public partial class LunoEditor : RichTextBox
             run.Tag = "__";
         });
 
-        // Code: `text`
+        // Code: `text` (緑色テキスト)
         changed |= ApplyRegexStyle(para, text, @"`(.+?)`", (run) => {
             run.FontFamily = new FontFamily("Consolas");
-            run.Background = new SolidColorBrush(Color.FromArgb(30, 128, 128, 128));
+            run.Foreground = new SolidColorBrush(Color.FromRgb(0x38, 0x8E, 0x3C)); // 緑色
+            run.Background = new SolidColorBrush(Color.FromArgb(20, 128, 128, 128));
             run.Tag = "`";
         });
 
