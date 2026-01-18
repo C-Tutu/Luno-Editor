@@ -78,6 +78,51 @@
             <Style TargetType="TextBox">
                 <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}"/>
             </Style>
+
+            <!-- Slim ScrollBar Style -->
+            <Style x:Key="SlimScrollBarThumb" TargetType="Thumb">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Thumb">
+                            <Border Background="#60808080"
+                                    CornerRadius="3"
+                                    Margin="1"/>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style TargetType="ScrollBar">
+                <Setter Property="Width" Value="8"/>
+                <Setter Property="MinWidth" Value="8"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Grid Background="Transparent">
+                                <Track x:Name="PART_Track"
+                                       IsDirectionReversed="True">
+                                    <Track.Thumb>
+                                        <Thumb Style="{StaticResource SlimScrollBarThumb}"/>
+                                    </Track.Thumb>
+                                </Track>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="Orientation" Value="Horizontal">
+                        <Setter Property="Height" Value="8"/>
+                        <Setter Property="MinHeight" Value="8"/>
+                        <Setter Property="Width" Value="Auto"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- RichTextBox Style -->
+            <Style TargetType="RichTextBox">
+                <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}"/>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
