@@ -12,7 +12,6 @@ UI Framework: WPF (Windows Presentation Foundation)
 Build Target: Windows 11 (Primary), Windows 10 (Fallback support required)
 Deployment: Native AOT (PublishAot=true)
 Architecture: Single Executable (No external DLLs)
-
 ```
 
 #### 2. Core Philosophy & Constraints
@@ -46,17 +45,15 @@ Architecture: Single Executable (No external DLLs)
 
 ```markdown
 1. ウィンドウ生成:
-   - タイトルバーなし（Chromeless）。
-   - リサイズ、ドラッグ移動、スナップレイアウト（Win11）が正常に動作すること。
-   
+    - タイトルバーなし（Chromeless）。
+    - リサイズ、ドラッグ移動、スナップレイアウト（Win11）が正常に動作すること。
 2. 視覚効果 (Visuals):
-   - Win11: DWMによるMica Alt効果の適用。
-   - 全環境: ノイズテクスチャ（Paper Texture）のオーバーレイ描画。
-   - ダーク/ライトモードのOS設定検知と、動的なテーマ切り替え実装。
+    - Win11: DWMによるMica Alt効果の適用。
+    - 全環境: ノイズテクスチャ（Paper Texture）のオーバーレイ描画。
+    - ダーク/ライトモードのOS設定検知と、動的なテーマ切り替え実装。
 
 3. 互換性チェック:
-   - Windows 10環境での動作確認ロジック（Mica非適用時の代替色 #F9F9F7/#1E1E1E の適用）。
-
+    - Windows 10環境での動作確認ロジック（Mica非適用時の代替色 #F9F9F7/#1E1E1E の適用）。
 ```
 
 **Phase 2: The Ink (Editor Engine)**
@@ -66,20 +63,19 @@ Architecture: Single Executable (No external DLLs)
 
 ```markdown
 1. 基本編集機能:
-   - アンドゥ/リドゥ、標準的なショートカットキーの実装。
-   - フォントレンダリングの最適化（ClearType設定など）。
+    - アンドゥ/リドゥ、標準的なショートカットキーの実装。
+    - フォントレンダリングの最適化（ClearType設定など）。
 
 2. Luno Markdown (LMD):
-   - 以下の記法を正規表現等で高速に検知し、スタイル（色・太字）のみを適用する。
-     - Header: `# `
-     - List: `- `, `* `
-     - Quote: `> `
-   - *注意:* 構造解析（AST構築）は行わず、あくまで「ハイライト」に留めること。
+    - 以下の記法を正規表現等で高速に検知し、スタイル（色・太字）のみを適用する。
+        - Header: `# `
+        - List: `- `, `* `
+        - Quote: `> `
+    - _注意:_ 構造解析（AST構築）は行わず、あくまで「ハイライト」に留めること。
 
 3. Smart Behaviors:
-   - オートインデント実装。
-   - URLの自動リンク化とクリック処理。
-
+    - オートインデント実装。
+    - URLの自動リンク化とクリック処理。
 ```
 
 **Phase 3: The Memory (Persistence & Lifecycle)**
@@ -89,17 +85,35 @@ Architecture: Single Executable (No external DLLs)
 
 ```markdown
 1. ライフサイクル管理:
-   - アプリ終了、サスペンド、非アクティブ化のタイミングをフック。
-   
+    - アプリ終了、サスペンド、非アクティブ化のタイミングをフック。
 2. データの永続化:
-   - 編集中のテキストを自動保存（Auto-Save）。
-   - ウィンドウ位置・サイズの記憶と復元。
-   
+    - 編集中のテキストを自動保存（Auto-Save）。
+    - ウィンドウ位置・サイズの記憶と復元。
 3. 設定管理:
-   - 実行ファイル同階層の `settings.json` の読み書き。
-   - 起動時にファイルがない場合はデフォルト値を生成。
-
+    - 実行ファイル同階層の `settings.json` の読み書き。
+    - 起動時にファイルがない場合はデフォルト値を生成。
 ```
+
+````
+
+**Phase 4: Optimization & Polish (Modern Notepad Evolution)**
+
+> **目的:** メモ帳を超える利便性と、愛着の湧くカスタマイズ性。
+> **コンセプト:** 「軽量・高速」を維持しつつ、視認性と操作性を向上させる。
+
+```markdown
+1. メモ帳の進化系機能:
+   - シンプルなステータスバー: 文字数、行数、ズーム倍率を控えめに表示。
+   - 検索機能: 軽量な検索バー（Ctrl+F）の実装（モーダルダイアログは避ける）。
+
+2. Customization (Color & Fonts):
+   - `settings.json` によるアクセントカラーのカスタマイズ対応。
+   - ユーザー指定フォントの反映強化。
+
+3. UI/UX Refinement:
+   - スクロールバーのスタイリング（OS標準から、よりLunoらしい細くモダンなデザインへ）。
+   - キャレットの点滅速度や幅の微調整オプション。
+````
 
 #### 4. Color Palette Constants
 
@@ -117,7 +131,7 @@ public static class LunoColors
     public static readonly Color AccentBlue   = Color.FromRgb(0x19, 0x76, 0xD2); // Links
     public static readonly Color AccentGreen  = Color.FromRgb(0x38, 0x8E, 0x3C); // Done/Safe
     public static readonly Color AccentYellow = Color.FromRgb(0xFB, 0xC0, 0x2D); // Highlight
-    
+
     // Add other colors from spec as needed...
 }
 

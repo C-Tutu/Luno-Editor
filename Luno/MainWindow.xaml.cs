@@ -18,7 +18,9 @@ public partial class MainWindow : Window
     private readonly ThemeManager _themeManager;
     private readonly SettingsManager _settingsManager;
     private readonly DispatcherTimer _autoSaveTimer;
+    private readonly DispatcherTimer _statusUpdateTimer;
     private IntPtr _hwnd;
+    private int _zoomLevel = 100;
 
     public MainWindow()
     {
@@ -36,10 +38,18 @@ public partial class MainWindow : Window
         };
         _autoSaveTimer.Tick += OnAutoSaveTick;
 
+        // ステータスバー更新タイマー（500ms間隔）
+        _statusUpdateTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _statusUpdateTimer.Tick += OnStatusUpdateTick;
+
         // ウィンドウハンドル取得後にMica効果を適用
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Closing += OnClosing;
+        PreviewMouseWheel += OnPreviewMouseWheel;
     }
 
     /// <summary>
@@ -72,11 +82,68 @@ public partial class MainWindow : Window
             Editor.SetPlainText(_settingsManager.Settings.LastContent);
         }
 
-        // 自動保存タイマー開始
+        // タイマー開始
         _autoSaveTimer.Start();
+        _statusUpdateTimer.Start();
+
+        // 初回ステータス更新
+        UpdateStatusBar();
 
         // エディタにフォーカスを設定
         Editor.Focus();
+    }
+
+    /// <summary>
+    /// ステータスバー更新タイマーハンドラ
+    /// </summary>
+    private void OnStatusUpdateTick(object? sender, EventArgs e)
+    {
+        UpdateStatusBar();
+    }
+
+    /// <summary>
+    /// ステータスバーの情報を更新
+    /// </summary>
+    private void UpdateStatusBar()
+    {
+        try
+        {
+            var text = Editor.GetPlainText();
+            var charCount = text.Length - text.Count(c => c == '\r' || c == '\n');
+            var lineCount = text.Split('\n').Length;
+
+            CharCountText.Text = $"{charCount:N0} 文字";
+            LineCountText.Text = $"{lineCount:N0} 行";
+            ZoomLevelText.Text = $"{_zoomLevel}%";
+        }
+        catch
+        {
+            // 更新失敗は無視
+        }
+    }
+
+    /// <summary>
+    /// Ctrl+ホイールでズーム
+    /// </summary>
+    private void OnPreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control))
+        {
+            e.Handled = true;
+
+            if (e.Delta > 0 && _zoomLevel < 200)
+            {
+                _zoomLevel += 10;
+            }
+            else if (e.Delta < 0 && _zoomLevel > 50)
+            {
+                _zoomLevel -= 10;
+            }
+
+            // エディタのフォントサイズを更新
+            Editor.FontSize = 14.0 * (_zoomLevel / 100.0);
+            UpdateStatusBar();
+        }
     }
 
     /// <summary>
