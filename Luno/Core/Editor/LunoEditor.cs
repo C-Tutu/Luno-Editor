@@ -12,19 +12,28 @@ using Luno.Core.Theming;
 /// <summary>
 /// Luno Markdown (LMD) 対応のエディタコントロール
 /// 軽量なハイライト処理に特化（AST構築なし）
+/// 装飾は表示時のみ、保存はプレーンテキスト
 /// </summary>
 public partial class LunoEditor : RichTextBox
 {
     // Markdownパターン（正規表現）
-    private static readonly Regex HeaderPattern = new(@"^(#{1,6})\s+(.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
-    private static readonly Regex ListPattern = new(@"^(\s*)([-*+]|\d+\.)\s+(.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
-    private static readonly Regex QuotePattern = new(@"^>\s+(.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex HeaderPattern = new(@"^(#{1,6})\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex ListPattern = new(@"^(\s*)([-*+]|\d+\.)\s+(.*)$", RegexOptions.Compiled);
+    private static readonly Regex QuotePattern = new(@"^>\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex UrlPattern = new(@"https?://[^\s<>""]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex BoldPattern = new(@"\*\*(.+?)\*\*|__(.+?)__", RegexOptions.Compiled);
-    private static readonly Regex ItalicPattern = new(@"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)|(?<!_)_(?!_)(.+?)(?<!_)_(?!_)", RegexOptions.Compiled);
+    private static readonly Regex BoldPattern = new(@"\*\*(.+?)\*\*", RegexOptions.Compiled);
+    private static readonly Regex ItalicPattern = new(@"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", RegexOptions.Compiled);
 
     private bool _isUpdating;
+    private bool _isDarkMode;
     private readonly DispatcherTimer _highlightTimer;
+
+    // テーマカラーブラシ（キャッシュ）
+    private SolidColorBrush _defaultBrush = new(LunoColors.TextLight);
+    private static readonly SolidColorBrush HeaderBrush = new(LunoColors.AccentRed);
+    private static readonly SolidColorBrush ListMarkerBrush = new(LunoColors.AccentGreen);
+    private static readonly SolidColorBrush QuoteBrush = new(LunoColors.TextMuted);
+    private static readonly SolidColorBrush UrlBrush = new(LunoColors.AccentBlue);
 
     public LunoEditor()
     {
@@ -43,7 +52,7 @@ public partial class LunoEditor : RichTextBox
         // ハイライト用タイマー（入力後遅延実行）
         _highlightTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(300)
+            Interval = TimeSpan.FromMilliseconds(150)
         };
         _highlightTimer.Tick += OnHighlightTimerTick;
 
@@ -57,6 +66,12 @@ public partial class LunoEditor : RichTextBox
             PagePadding = new Thickness(0),
             LineHeight = 1.5
         };
+
+        // ブラシをFreeze（パフォーマンス向上）
+        HeaderBrush.Freeze();
+        ListMarkerBrush.Freeze();
+        QuoteBrush.Freeze();
+        UrlBrush.Freeze();
     }
 
     /// <summary>
@@ -64,9 +79,15 @@ public partial class LunoEditor : RichTextBox
     /// </summary>
     public void ApplyTheme(bool isDark)
     {
+        _isDarkMode = isDark;
         Background = Brushes.Transparent;
-        Foreground = new SolidColorBrush(LunoColors.GetTextColor(isDark));
+        _defaultBrush = new SolidColorBrush(LunoColors.GetTextColor(isDark));
+        _defaultBrush.Freeze();
+        Foreground = _defaultBrush;
         CaretBrush = Foreground;
+
+        // テーマ変更時は全体を再ハイライト
+        HighlightAllParagraphs();
     }
 
     #region Text Changed & Highlighting
@@ -83,28 +104,184 @@ public partial class LunoEditor : RichTextBox
     private void OnHighlightTimerTick(object? sender, EventArgs e)
     {
         _highlightTimer.Stop();
-        ApplyHighlighting();
+        HighlightCurrentParagraph();
     }
 
     /// <summary>
-    /// Markdown構文のハイライト適用
-    /// パフォーマンスのため、可視範囲のみ処理
+    /// カーソル位置の段落のみハイライト（高速）
     /// </summary>
-    private void ApplyHighlighting()
+    private void HighlightCurrentParagraph()
+    {
+        if (_isUpdating) return;
+
+        var para = CaretPosition?.Paragraph;
+        if (para != null)
+        {
+            HighlightParagraph(para);
+        }
+    }
+
+    /// <summary>
+    /// 全段落をハイライト（起動時・テーマ変更時）
+    /// </summary>
+    private void HighlightAllParagraphs()
     {
         if (_isUpdating) return;
         _isUpdating = true;
 
         try
         {
-            var text = new TextRange(Document.ContentStart, Document.ContentEnd).Text;
-            // ハイライト処理は将来的に実装
-            // 現時点では安定性優先でスキップ
+            foreach (var block in Document.Blocks)
+            {
+                if (block is Paragraph para)
+                {
+                    HighlightParagraphInternal(para);
+                }
+            }
         }
         finally
         {
             _isUpdating = false;
         }
+    }
+
+    /// <summary>
+    /// 指定段落にハイライトを適用
+    /// </summary>
+    private void HighlightParagraph(Paragraph para)
+    {
+        _isUpdating = true;
+        try
+        {
+            HighlightParagraphInternal(para);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// 段落ハイライトの内部実装
+    /// </summary>
+    private void HighlightParagraphInternal(Paragraph para)
+    {
+        // 段落のテキストを取得
+        var range = new TextRange(para.ContentStart, para.ContentEnd);
+        var text = range.Text;
+
+        if (string.IsNullOrEmpty(text)) return;
+
+        // まずデフォルトスタイルにリセット
+        range.ApplyPropertyValue(TextElement.ForegroundProperty, _defaultBrush);
+        range.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Normal);
+        range.ApplyPropertyValue(TextElement.FontStyleProperty, FontStyles.Normal);
+        range.ApplyPropertyValue(Inline.TextDecorationsProperty, null);
+
+        // ヘッダーパターン
+        var headerMatch = HeaderPattern.Match(text);
+        if (headerMatch.Success)
+        {
+            ApplyStyle(para, headerMatch.Index, headerMatch.Length, HeaderBrush, FontWeights.Bold);
+            return; // ヘッダー行は他のパターンを無視
+        }
+
+        // 引用パターン
+        var quoteMatch = QuotePattern.Match(text);
+        if (quoteMatch.Success)
+        {
+            range.ApplyPropertyValue(TextElement.ForegroundProperty, QuoteBrush);
+            range.ApplyPropertyValue(TextElement.FontStyleProperty, FontStyles.Italic);
+            return;
+        }
+
+        // リストパターン（マーカー部分のみ色変更）
+        var listMatch = ListPattern.Match(text);
+        if (listMatch.Success)
+        {
+            var markerStart = listMatch.Groups[1].Length;
+            var markerLength = listMatch.Groups[2].Length;
+            ApplyStyle(para, markerStart, markerLength + 1, ListMarkerBrush, null);
+        }
+
+        // URLパターン
+        foreach (Match urlMatch in UrlPattern.Matches(text))
+        {
+            ApplyStyle(para, urlMatch.Index, urlMatch.Length, UrlBrush, null, TextDecorations.Underline);
+        }
+
+        // 太字パターン
+        foreach (Match boldMatch in BoldPattern.Matches(text))
+        {
+            ApplyStyle(para, boldMatch.Index, boldMatch.Length, null, FontWeights.Bold);
+        }
+
+        // 斜体パターン
+        foreach (Match italicMatch in ItalicPattern.Matches(text))
+        {
+            ApplyStyle(para, italicMatch.Index, italicMatch.Length, null, null, null, FontStyles.Italic);
+        }
+    }
+
+    /// <summary>
+    /// 指定範囲にスタイルを適用
+    /// </summary>
+    private void ApplyStyle(
+        Paragraph para,
+        int startIndex,
+        int length,
+        SolidColorBrush? foreground,
+        FontWeight? fontWeight = null,
+        TextDecorationCollection? textDecorations = null,
+        FontStyle? fontStyle = null)
+    {
+        var start = GetTextPointerAtOffset(para.ContentStart, startIndex);
+        var end = GetTextPointerAtOffset(para.ContentStart, startIndex + length);
+
+        if (start == null || end == null) return;
+
+        var range = new TextRange(start, end);
+
+        if (foreground != null)
+            range.ApplyPropertyValue(TextElement.ForegroundProperty, foreground);
+        if (fontWeight.HasValue)
+            range.ApplyPropertyValue(TextElement.FontWeightProperty, fontWeight.Value);
+        if (textDecorations != null)
+            range.ApplyPropertyValue(Inline.TextDecorationsProperty, textDecorations);
+        if (fontStyle.HasValue)
+            range.ApplyPropertyValue(TextElement.FontStyleProperty, fontStyle.Value);
+    }
+
+    /// <summary>
+    /// 文字オフセットからTextPointerを取得
+    /// </summary>
+    private static TextPointer? GetTextPointerAtOffset(TextPointer start, int offset)
+    {
+        var current = start;
+        int count = 0;
+
+        while (current != null && count < offset)
+        {
+            if (current.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            {
+                var runLength = current.GetTextRunLength(LogicalDirection.Forward);
+                var remaining = offset - count;
+
+                if (remaining <= runLength)
+                {
+                    return current.GetPositionAtOffset(remaining);
+                }
+
+                count += runLength;
+                current = current.GetNextContextPosition(LogicalDirection.Forward);
+            }
+            else
+            {
+                current = current.GetNextContextPosition(LogicalDirection.Forward);
+            }
+        }
+
+        return current;
     }
 
     #endregion
@@ -277,11 +454,32 @@ public partial class LunoEditor : RichTextBox
     }
 
     /// <summary>
-    /// プレーンテキストを設定
+    /// プレーンテキストを設定（ハイライト適用）
     /// </summary>
     public void SetPlainText(string text)
     {
-        Document.Blocks.Clear();
-        Document.Blocks.Add(new Paragraph(new Run(text)));
+        _isUpdating = true;
+        try
+        {
+            Document.Blocks.Clear();
+            
+            // 行ごとに段落を作成
+            var lines = text.Split('\n');
+            foreach (var line in lines)
+            {
+                var para = new Paragraph(new Run(line.TrimEnd('\r')))
+                {
+                    Margin = new Thickness(0)
+                };
+                Document.Blocks.Add(para);
+            }
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+
+        // 全体をハイライト
+        HighlightAllParagraphs();
     }
 }
