@@ -45,6 +45,10 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         Closing += OnClosing;
         PreviewMouseWheel += OnPreviewMouseWheel;
+        
+        // タスクバーアイコンを明示的に設定
+        var iconUri = new Uri("pack://application:,,,/Assets/icon-128.png");
+        Icon = System.Windows.Media.Imaging.BitmapFrame.Create(iconUri);
     }
 
     /// <summary>
@@ -393,9 +397,12 @@ public partial class MainWindow : Window
                 (byte)Math.Min(255, theme.Background.B + 10));
         var editorBgBrush = new SolidColorBrush(contrastColor);
 
+        // 文字色は常に黒で統一
+        var blackTextBrush = new SolidColorBrush(Colors.Black);
+
         // 統一カラーを適用
         Resources["BackgroundBrush"] = bgBrush;
-        Resources["TextBrush"] = textBrush;
+        Resources["TextBrush"] = blackTextBrush; // 黒で統一
         Resources["EditorBackgroundBrush"] = editorBgBrush; // コントラスト付き
 
         // RootGridに直接背景色を適用（全システム共通）
