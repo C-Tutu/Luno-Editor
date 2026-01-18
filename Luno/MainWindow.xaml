@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:editor="clr-namespace:Luno.Core.Editor"
         Title="Luno"
+        Icon="pack://application:,,,/Assets/icon-128.png"
         Width="800" Height="600"
         MinWidth="400" MinHeight="300"
         WindowStyle="None"
