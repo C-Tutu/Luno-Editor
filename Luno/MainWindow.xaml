@@ -1,0 +1,74 @@
+﻿<Window x:Class="Luno.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:editor="clr-namespace:Luno.Core.Editor"
+        Title="Luno"
+        Width="800" Height="600"
+        MinWidth="400" MinHeight="300"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        Background="Transparent"
+        ResizeMode="CanResizeWithGrip">
+
+    <!-- Chromeless Window with proper resize/drag support -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="32"
+                      ResizeBorderThickness="6"
+                      GlassFrameThickness="-1"
+                      CornerRadius="8"
+                      UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Grid x:Name="RootGrid">
+        <!-- Noise Texture Overlay (紙の質感 - コードで動的生成) -->
+        <Rectangle x:Name="NoiseOverlay"
+                   IsHitTestVisible="False"
+                   Opacity="1"/>
+
+        <!-- Main Content Area -->
+        <DockPanel Margin="0">
+            <!-- Custom Title Bar -->
+            <Grid DockPanel.Dock="Top" Height="32" x:Name="TitleBar">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Title -->
+                <TextBlock Grid.Column="0"
+                           Text="Luno"
+                           VerticalAlignment="Center"
+                           Margin="12,0,0,0"
+                           FontSize="12"
+                           FontWeight="Medium"
+                           Foreground="{DynamicResource TextBrush}"/>
+
+                <!-- Window Controls -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button x:Name="MinimizeButton"
+                            Content="&#xE921;"
+                            Style="{StaticResource WindowControlButton}"
+                            Click="MinimizeButton_Click"/>
+                    <Button x:Name="MaximizeButton"
+                            Content="&#xE922;"
+                            Style="{StaticResource WindowControlButton}"
+                            Click="MaximizeButton_Click"/>
+                    <Button x:Name="CloseButton"
+                            Content="&#xE8BB;"
+                            Style="{StaticResource WindowCloseButton}"
+                            Click="CloseButton_Click"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Editor Area -->
+            <Border x:Name="EditorContainer"
+                    Margin="8,0,8,8"
+                    CornerRadius="4"
+                    Background="{DynamicResource EditorBackgroundBrush}">
+                <editor:LunoEditor x:Name="Editor"/>
+            </Border>
+        </DockPanel>
+    </Grid>
+</Window>

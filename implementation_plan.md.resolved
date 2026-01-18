@@ -1,0 +1,50 @@
+# Luno Editor 実装計画書 (Phase 1)
+
+## 概要
+軽量テキストエディタ「Luno」の初期構築および「Phase 1: The Canvas」の実装計画です。
+README.mdの制約に基づき、パフォーマンスと互換性を最優先します。
+
+## User Review Required
+> [!IMPORTANT]
+> **Native AOTの制約:**
+> - リフレクションを多用するライブラリ（通常のWPF MVVMライブラリ等）は使用しません。
+> - データバインディングは通常通り動作しますが、トリミング警告に注意する必要があります。
+> - `System.Text.Json` は Source Generator モードのみを使用します。
+
+## Proposed Changes
+
+### Project Initialization
+#### [NEW] [Luno.sln / Luno.csproj](file:///c:/Projects/Luno-Editor/Luno/Luno.csproj)
+- **Target Framework:** .NET 10.0 (実環境に合わせて調整)
+- **UseWPF:** true
+- **PublishAot:** true
+- **InvariantGlobalization:** true (サイズ削減のため検討、日本語必須ならfalse) -> **false** (IME考慮)
+- **StripSymbols:** true
+
+### Phase 1: The Canvas (Windowing & Rendering)
+#### [NEW] [MainWindow.xaml / .xaml.cs](file:///c:/Projects/Luno-Editor/Luno/MainWindow.xaml)
+- **WindowStyle:** None
+- **AllowsTransparency:** False (Mica有効化のため必須)
+- **WindowChrome:** キャプションの高さ調整とリサイズ境界の定義。
+
+#### [NEW] [NativeMethods.cs](file:///c:/Projects/Luno-Editor/Luno/Core/Interop/NativeMethods.cs)
+- `DwmSetWindowAttribute` (dwmapi.dll) のP/Invoke定義。
+- Win32 APIによるダークモード切り替えサポート。
+
+#### [NEW] [ThemeManager.cs](file:///c:/Projects/Luno-Editor/Luno/Core/Theming/ThemeManager.cs)
+- OSの輝度設定（Light/Dark）をレジストリまたはSystemParametersから監視。
+- `LunoColors` 定数に基づき、ResourceDictionaryを動的に書き換え。
+
+#### [NEW] [NoiseTexture.png / Shader](file:///c:/Projects/Luno-Editor/Luno/Assets/Textures/Noise.png)
+- 紙の質感を出すための透過PNG、またはピクセルシェーダーによる動的生成（軽量さ重視でPNGタイル推奨）。
+
+## Verification Plan
+
+### Automated Tests
+- 現段階では単体テストよりも実機動作確認を優先（UI重視のため）。
+- `dotnet publish -c Release -r win-x64` でAOTビルドが成功することを確認。
+
+### Manual Verification
+- **Startup Time:** 起動後、ウィンドウが表示されるまでが体感200ms以内か。
+- **Mica Effect:** Windows 11で背景が透けるか。Windows 10で単色フォールバックするか。
+- **Resizing:** エッジでのリサイズ、スナップ（Win+矢印）が正常か。
