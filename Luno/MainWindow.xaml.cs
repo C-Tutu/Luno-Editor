@@ -364,7 +364,30 @@ public partial class MainWindow : Window
         ApplyLunoTheme(LunoPalette.Themes[nextIndex]);
     }
 
+    /// <summary>
+    /// 設定ウィンドウからテーマを適用
+    /// </summary>
+    public void ApplyLunoThemePublic(LunoPalette.LunoTheme theme) => ApplyLunoTheme(theme);
+
+    /// <summary>
+    /// 設定ウィンドウからズームレベルを設定
+    /// </summary>
+    public void SetZoomLevel(int level)
+    {
+        if (level < 50 || level > 200) return;
+        _zoomLevel = level;
+        Editor.FontSize = 14.0 * (_zoomLevel / 100.0);
+        _settingsManager.Settings.ZoomLevel = _zoomLevel;
+        UpdateStatusBar();
+    }
+
     #region Window Control Buttons
+
+    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var settingsWindow = new SettingsWindow(this);
+        settingsWindow.ShowDialog();
+    }
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e)
     {

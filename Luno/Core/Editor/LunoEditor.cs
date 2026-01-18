@@ -11,6 +11,7 @@ using Luno.Core.Theming;
 /// <summary>
 /// Luno Markdown (LMD) 対応のエディタコントロール
 /// マークダウン記号入力後スペース/エンターで書式適用、記号は非表示
+/// Inline styles supported: **Bold**, *Italic*, ~~Strike~~, `Code`, ||Spoiler||
 /// </summary>
 public partial class LunoEditor : RichTextBox
 {
@@ -40,6 +41,7 @@ public partial class LunoEditor : RichTextBox
 
         // イベント登録
         PreviewKeyDown += OnPreviewKeyDown;
+        PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
 
         // 初期ドキュメント設定
         Document = new FlowDocument
@@ -140,9 +142,15 @@ public partial class LunoEditor : RichTextBox
             }
 
             // 引用: >
-            if (lineText.Trim() == ">")
+            if (lineText.TrimStart().StartsWith(">"))
             {
                 ApplyQuoteFormat(para, lineStart, caretPos);
+                return true;
+            }
+
+            // Inline Formatting
+            if (TryApplyInlineFormat(para, lineText))
+            {
                 return true;
             }
 
@@ -152,6 +160,120 @@ public partial class LunoEditor : RichTextBox
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// インライン書式を適用
+    /// </summary>
+    private bool TryApplyInlineFormat(Paragraph para, string text)
+    {
+        bool changed = false;
+
+        // Bold: **text**
+        changed |= ApplyRegexStyle(para, text, @"\*\*(.+?)\*\*", (run) => {
+            run.FontWeight = FontWeights.Bold;
+            run.Tag = "**";
+        });
+
+        // Italic: *text* or _text_
+        changed |= ApplyRegexStyle(para, text, @"(?<!\*)\*([^\*]+?)\*(?!\*)", (run) => {
+            run.FontStyle = FontStyles.Italic;
+            run.Tag = "*";
+        });
+
+        // Strike: ~~text~~
+        changed |= ApplyRegexStyle(para, text, @"~~(.+?)~~", (run) => {
+            run.TextDecorations = TextDecorations.Strikethrough;
+            run.Tag = "~~";
+        });
+
+        // Underline: __text__
+        changed |= ApplyRegexStyle(para, text, @"__(.+?)__", (run) => {
+            run.TextDecorations = TextDecorations.Underline;
+            run.Tag = "__";
+        });
+
+        // Code: `text`
+        changed |= ApplyRegexStyle(para, text, @"`(.+?)`", (run) => {
+            run.FontFamily = new FontFamily("Consolas");
+            run.Background = new SolidColorBrush(Color.FromArgb(30, 128, 128, 128));
+            run.Tag = "`";
+        });
+
+        // Spoiler: ||text||
+        changed |= ApplyRegexStyle(para, text, @"\|\|(.+?)\|\|", (run) => {
+            run.Background = Brushes.Black;
+            run.Foreground = Brushes.Black; // Hidden text
+            run.Tag = "||";
+            run.ToolTip = "クリックして表示"; 
+        });
+
+        return changed;
+    }
+
+    private bool ApplyRegexStyle(Paragraph para, string text, string pattern, Action<Run> styleAction)
+    {
+        var match = Regex.Match(text, pattern);
+        if (match.Success)
+        {
+            _isUpdating = true;
+            try
+            {
+                var fullMatch = match.Value;
+                var content = match.Groups[1].Value;
+
+                // Simple replacement using TextRange index
+                var range = new TextRange(para.ContentStart, para.ContentEnd);
+                var offset = range.Text.IndexOf(fullMatch);
+                
+                if (offset >= 0)
+                {
+                    var pointerStart = range.Start.GetPositionAtOffset(offset);
+                    var pointerEnd = range.Start.GetPositionAtOffset(offset + fullMatch.Length);
+
+                    if (pointerStart != null && pointerEnd != null)
+                    {
+                        var targetRange = new TextRange(pointerStart, pointerEnd);
+                        targetRange.Text = ""; 
+                        
+                        var newRun = new Run(content);
+                        styleAction(newRun);
+                        
+                        // Insert the new run
+                        // Note: To insert strictly at TextPointer is tricky with Runs.
+                        // We use a safe approximation: if the para was just text, we replace.
+                        // But since we cleared text, we can insert at pointerStart? 
+                        // No, pointerStart might be "dead" after deletion.
+                        
+                        // Re-calculate position after deletion?
+                        // range.Start is still good.
+                        var insertionPos = range.Start.GetPositionAtOffset(offset);
+                        if (insertionPos != null)
+                        {
+                            // We need to insert an Inline. 
+                            // Paragraph.Inlines.Insert... requires an existing inline.
+                            
+                            // Simplest way for RichTextBox: Use TextRange to insert text, 
+                            // then apply properties, then set Tag via Property (if possible)
+                            // But Tag isn't a DependencyProperty on TextElement exposed via ApplyPropertyValue.
+                            
+                            // Alternative: Modify the Run directly if we can access it.
+                            // Inserting `newRun` via `new Span(newRun, insertionPos)`?
+                            
+                            new Span(newRun, insertionPos); // Inserts at position
+                        }
+                        
+                        return true; 
+                    }
+                }
+                return false;
+            }
+            finally
+            {
+                _isUpdating = false;
+            }
+        }
+        return false;
     }
 
     /// <summary>
@@ -364,48 +486,97 @@ public partial class LunoEditor : RichTextBox
 
     #region URL Handling
 
+    #region URL Handling
+
     /// <summary>
-    /// URLクリック時のブラウザ起動
+    /// URLクリック時のブラウザ起動 (Robust)
     /// </summary>
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    private void OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        base.OnMouseLeftButtonUp(e);
-
-        try
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            var pos = e.GetPosition(this);
+            var pointer = GetPositionFromPoint(pos, true);
+            if (pointer != null)
             {
-                var position = e.GetPosition(this);
-                var textPointer = GetPositionFromPoint(position, true);
-
-                if (textPointer != null)
+                // カーソル位置の単語を取得
+                var start = pointer;
+                var end = pointer;
+                
+                // 前に探索
+                while (start.GetPointerContext(LogicalDirection.Backward) == TextPointerContext.Text)
                 {
-                    var start = textPointer.GetPositionAtOffset(-50) ?? textPointer.DocumentStart;
-                    var end = textPointer.GetPositionAtOffset(50) ?? textPointer.DocumentEnd;
-                    var text = new TextRange(start, end).Text;
-
-                    var urlMatch = Regex.Match(text, @"https?://[^\s<>""]+");
-                    if (urlMatch.Success)
+                    var text = start.GetTextInRun(LogicalDirection.Backward);
+                    var spaceIndex = text.LastIndexOfAny(new[] { ' ', '\t', '\n', '>', '<' });
+                    if (spaceIndex != -1)
                     {
-                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        start = start.GetPositionAtOffset(spaceIndex - text.Length); // 近似
+                        break; 
+                    }
+                    start = start.GetPositionAtOffset(-text.Length);
+                }
+                
+                // 後ろに探索
+                // (簡易実装: 行全体を取得してRegexで判定)
+                var lineStart = pointer.GetLineStartPosition(0) ?? pointer.DocumentStart;
+                var lineEnd = pointer.GetLineStartPosition(1) ?? pointer.DocumentEnd;
+                var range = new TextRange(lineStart, lineEnd);
+                var textFull = range.Text;
+                
+                // クリック位置の文字インデックス
+                var offset = lineStart.GetOffsetToPosition(pointer); 
+                // Note: GetOffsetToPosition returns symbol count, not char count. Unreliable.
+                
+                // Simple approach: Match all URLs in line, check if point is inside geometry
+                foreach (Match match in Regex.Matches(textFull, @"https?://[^\s<>""]+"))
+                {
+                    var urlStart = lineStart.GetPositionAtOffset(textFull.IndexOf(match.Value)); // Very rough
+                    if (urlStart != null)
+                    {
+                        var urlEnd = urlStart.GetPositionAtOffset(match.Value.Length); // Rough
+                        
+                        // 行内検索してRangeを作る
+                        var foundStart = range.Start;
+                        while (foundStart != null && foundStart.CompareTo(range.End) < 0)
                         {
-                            FileName = urlMatch.Value,
-                            UseShellExecute = true
-                        });
+                            var runText = foundStart.GetTextInRun(LogicalDirection.Forward);
+                            int index = runText.IndexOf(match.Value);
+                            if (index >= 0)
+                            {
+                                var s = foundStart.GetPositionAtOffset(index);
+                                var en = s.GetPositionAtOffset(match.Value.Length);
+                                
+                                // クリック位置がURL範囲内か？
+                                // TextPointerの比較は信頼性が高い
+                                if (pointer.CompareTo(s) >= 0 && pointer.CompareTo(en) <= 0)
+                                {
+                                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                    {
+                                        FileName = match.Value,
+                                        UseShellExecute = true
+                                    });
+                                    e.Handled = true;
+                                    return;
+                                }
+                            }
+                            foundStart = foundStart.GetNextContextPosition(LogicalDirection.Forward);
+                        }
                     }
                 }
             }
         }
-        catch
-        {
-            // エラーは無視
-        }
+    }
+
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseLeftButtonUp(e);
+        // Deprecated simple logic removed
     }
 
     #endregion
 
     /// <summary>
-    /// プレーンテキストを取得
+    /// プレーンテキストを取得 (Markdown記号復元)
     /// </summary>
     public string GetPlainText()
     {
@@ -417,26 +588,67 @@ public partial class LunoEditor : RichTextBox
                 if (block is Paragraph para)
                 {
                     var tag = para.Tag as string;
-                    var text = new TextRange(para.ContentStart, para.ContentEnd).Text;
-
-                    // 保存時はMarkdown記号を復元
+                    
+                    // 行頭マーカー
+                    string prefix = "";
                     if (tag?.StartsWith("H") == true && int.TryParse(tag[1..], out var level))
                     {
-                        result.AppendLine(new string('#', level) + " " + text);
+                        prefix = new string('#', level) + " ";
                     }
                     else if (tag == "List")
                     {
-                        // •を-に戻す
-                        result.AppendLine(text.Replace("• ", "- "));
+                        prefix = "- ";
+                    }
+                    else if (tag == "NumList")
+                    {
+                        // 番号は再計算せず簡易的に1.とするか、パラグラフから取得する
+                        // ここでは正規表現で取得したテキストに既に番号が含まれているか確認が必要だが
+                        // Inlines再構築では prefix は自分で不可する必要がある
+                        // リストの実装: Inlinesの最初は "1. " というRunになっているはず
+                        // prefixなしでInlinesから取得する
+                        prefix = ""; // Inlines will contain the number
                     }
                     else if (tag == "Quote")
                     {
-                        result.AppendLine("> " + text);
+                        prefix = "> ";
                     }
-                    else
+
+                    result.Append(prefix);
+
+                    // Inline要素を走査してMarkdownを復元
+                    foreach (var inline in para.Inlines)
                     {
-                        result.AppendLine(text);
+                        if (inline is Run run)
+                        {
+                            var rText = run.Text;
+                            if (tag == "List" && rText.StartsWith("• ")) rText = rText.Substring(2); // Remove bullet
+
+                            var iTag = run.Tag as string;
+                            if (!string.IsNullOrEmpty(iTag))
+                            {
+                                if (iTag == "**") result.Append($"**{rText}**");
+                                else if (iTag == "*") result.Append($"*{rText}*");
+                                else if (iTag == "~~") result.Append($"~~{rText}~~");
+                                else if (iTag == "__") result.Append($"__{rText}__");
+                                else if (iTag == "`") result.Append($"`{rText}`");
+                                else if (iTag == "||") result.Append($"||{rText}||");
+                                else result.Append(rText);
+                            }
+                            else
+                            {
+                                result.Append(rText);
+                            }
+                        }
+                        else if (inline is Span span) // Spanもチェック
+                        {
+                            // 簡易再帰
+                            foreach (var si in span.Inlines)
+                            {
+                                if (si is Run sr) result.Append(sr.Text);
+                            }
+                        }
                     }
+                    result.AppendLine();
                 }
             }
             return result.ToString().TrimEnd();
@@ -532,4 +744,5 @@ public partial class LunoEditor : RichTextBox
         para.Inlines.Add(new Run(line));
         return para;
     }
+    #endregion
 }

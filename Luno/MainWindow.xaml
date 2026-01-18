@@ -47,6 +47,13 @@
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             WindowChrome.IsHitTestVisibleInChrome="True">
+                    <!-- Settings Button -->
+                    <Button x:Name="SettingsButton"
+                            Content="&#xE713;"
+                            Style="{StaticResource WindowControlButton}"
+                            Click="SettingsButton_Click"
+                            ToolTip="設定"/>
+                    
                     <Button x:Name="MinimizeButton"
                             Content="&#xE921;"
                             Style="{StaticResource WindowControlButton}"
@@ -62,12 +69,73 @@
                 </StackPanel>
             </Grid>
 
-            <!-- Editor Area -->
-            <Border x:Name="EditorContainer"
-                    Margin="8,0,8,0"
-                    CornerRadius="4,4,0,0"
+            <!-- Status Bar -->
+            <Border DockPanel.Dock="Bottom"
+                    Height="24"
+                    Margin="8,0,8,8"
+                    CornerRadius="0,0,4,4"
                     Background="{DynamicResource EditorBackgroundBrush}">
-                <editor:LunoEditor x:Name="Editor"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Line, Column -->
+                    <TextBlock Grid.Column="0"
+                               x:Name="CursorPosText"
+                               Text="行 1, 列 1"
+                               VerticalAlignment="Center"
+                               Margin="12,0,0,0"
+                               FontSize="11"
+                               Opacity="0.7"
+                               Foreground="{DynamicResource TextBrush}"/>
+
+                    <!-- Character Count -->
+                    <TextBlock Grid.Column="1"
+                               x:Name="CharCountText"
+                               Text="0 文字"
+                               VerticalAlignment="Center"
+                               Margin="16,0,0,0"
+                               FontSize="11"
+                               Opacity="0.6"
+                               Foreground="{DynamicResource TextBrush}"/>
+
+                    <!-- Spacer -->
+                    <TextBlock Grid.Column="2"/>
+
+                    <!-- Zoom Level -->
+                    <TextBlock Grid.Column="3"
+                               x:Name="ZoomLevelText"
+                               Text="100%"
+                               VerticalAlignment="Center"
+                               Margin="12,0,0,0"
+                               FontSize="11"
+                               Opacity="0.6"
+                               Foreground="{DynamicResource TextBrush}"/>
+
+                    <!-- Line Ending -->
+                    <TextBlock Grid.Column="4"
+                               Text="Windows (CRLF)"
+                               VerticalAlignment="Center"
+                               Margin="12,0,0,0"
+                               FontSize="11"
+                               Opacity="0.5"
+                               Foreground="{DynamicResource TextBrush}"/>
+
+                    <!-- Encoding -->
+                    <TextBlock Grid.Column="5"
+                               Text="UTF-8"
+                               VerticalAlignment="Center"
+                               Margin="12,0,12,0"
+                               FontSize="11"
+                               Opacity="0.5"
+                               Foreground="{DynamicResource TextBrush}"/>
+                </Grid>
             </Border>
 
             <!-- Find Bar (Collapsed by default) -->
@@ -139,73 +207,12 @@
                 </Grid>
             </Border>
 
-            <!-- Status Bar -->
-            <Border DockPanel.Dock="Bottom"
-                    Height="24"
-                    Margin="8,0,8,8"
-                    CornerRadius="0,0,4,4"
+            <!-- Editor Area -->
+            <Border x:Name="EditorContainer"
+                    Margin="8,0,8,0"
+                    CornerRadius="4,4,0,0"
                     Background="{DynamicResource EditorBackgroundBrush}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Line, Column -->
-                    <TextBlock Grid.Column="0"
-                               x:Name="CursorPosText"
-                               Text="行 1, 列 1"
-                               VerticalAlignment="Center"
-                               Margin="12,0,0,0"
-                               FontSize="11"
-                               Opacity="0.7"
-                               Foreground="{DynamicResource TextBrush}"/>
-
-                    <!-- Character Count -->
-                    <TextBlock Grid.Column="1"
-                               x:Name="CharCountText"
-                               Text="0 文字"
-                               VerticalAlignment="Center"
-                               Margin="16,0,0,0"
-                               FontSize="11"
-                               Opacity="0.6"
-                               Foreground="{DynamicResource TextBrush}"/>
-
-                    <!-- Spacer -->
-                    <TextBlock Grid.Column="2"/>
-
-                    <!-- Zoom Level -->
-                    <TextBlock Grid.Column="3"
-                               x:Name="ZoomLevelText"
-                               Text="100%"
-                               VerticalAlignment="Center"
-                               Margin="12,0,0,0"
-                               FontSize="11"
-                               Opacity="0.6"
-                               Foreground="{DynamicResource TextBrush}"/>
-
-                    <!-- Line Ending -->
-                    <TextBlock Grid.Column="4"
-                               Text="Windows (CRLF)"
-                               VerticalAlignment="Center"
-                               Margin="12,0,0,0"
-                               FontSize="11"
-                               Opacity="0.5"
-                               Foreground="{DynamicResource TextBrush}"/>
-
-                    <!-- Encoding -->
-                    <TextBlock Grid.Column="5"
-                               Text="UTF-8"
-                               VerticalAlignment="Center"
-                               Margin="12,0,12,0"
-                               FontSize="11"
-                               Opacity="0.5"
-                               Foreground="{DynamicResource TextBrush}"/>
-                </Grid>
+                <editor:LunoEditor x:Name="Editor"/>
             </Border>
         </DockPanel>
     </Grid>
