@@ -318,12 +318,165 @@ public partial class MainWindow : Window
 
     #endregion
 
+    #region Find Bar
+
+    private List<int> _findMatches = new();
+    private int _currentMatchIndex = -1;
+
+    /// <summary>
+    /// Ctrl+Fで検索バーを表示
+    /// </summary>
+    protected override void OnKeyDown(System.Windows.Input.KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (e.Key == System.Windows.Input.Key.F && 
+            System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control))
+        {
+            e.Handled = true;
+            ShowFindBar();
+        }
+        else if (e.Key == System.Windows.Input.Key.Escape && FindBar.Visibility == Visibility.Visible)
+        {
+            e.Handled = true;
+            HideFindBar();
+        }
+    }
+
+    private void ShowFindBar()
+    {
+        FindBar.Visibility = Visibility.Visible;
+        FindTextBox.Focus();
+        FindTextBox.SelectAll();
+    }
+
+    private void HideFindBar()
+    {
+        FindBar.Visibility = Visibility.Collapsed;
+        _findMatches.Clear();
+        _currentMatchIndex = -1;
+        FindMatchCount.Text = "";
+        Editor.Focus();
+    }
+
+    private void FindTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        PerformSearch();
+    }
+
+    private void FindTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+        {
+            e.Handled = true;
+            if (System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift))
+                FindPrevious();
+            else
+                FindNext();
+        }
+        else if (e.Key == System.Windows.Input.Key.Escape)
+        {
+            e.Handled = true;
+            HideFindBar();
+        }
+    }
+
+    private void FindPrevButton_Click(object sender, RoutedEventArgs e) => FindPrevious();
+    private void FindNextButton_Click(object sender, RoutedEventArgs e) => FindNext();
+    private void FindCloseButton_Click(object sender, RoutedEventArgs e) => HideFindBar();
+
+    private void PerformSearch()
+    {
+        _findMatches.Clear();
+        _currentMatchIndex = -1;
+
+        var searchText = FindTextBox.Text;
+        if (string.IsNullOrEmpty(searchText))
+        {
+            FindMatchCount.Text = "";
+            return;
+        }
+
+        try
+        {
+            var content = Editor.GetPlainText();
+            var index = 0;
+
+            while ((index = content.IndexOf(searchText, index, StringComparison.OrdinalIgnoreCase)) != -1)
+            {
+                _findMatches.Add(index);
+                index += searchText.Length;
+            }
+
+            if (_findMatches.Count > 0)
+            {
+                _currentMatchIndex = 0;
+                FindMatchCount.Text = $"1/{_findMatches.Count}";
+                NavigateToMatch(_currentMatchIndex);
+            }
+            else
+            {
+                FindMatchCount.Text = "0 件";
+            }
+        }
+        catch
+        {
+            FindMatchCount.Text = "";
+        }
+    }
+
+    private void FindNext()
+    {
+        if (_findMatches.Count == 0) return;
+        _currentMatchIndex = (_currentMatchIndex + 1) % _findMatches.Count;
+        FindMatchCount.Text = $"{_currentMatchIndex + 1}/{_findMatches.Count}";
+        NavigateToMatch(_currentMatchIndex);
+    }
+
+    private void FindPrevious()
+    {
+        if (_findMatches.Count == 0) return;
+        _currentMatchIndex = (_currentMatchIndex - 1 + _findMatches.Count) % _findMatches.Count;
+        FindMatchCount.Text = $"{_currentMatchIndex + 1}/{_findMatches.Count}";
+        NavigateToMatch(_currentMatchIndex);
+    }
+
+    private void NavigateToMatch(int matchIndex)
+    {
+        try
+        {
+            var position = _findMatches[matchIndex];
+            var searchLength = FindTextBox.Text.Length;
+
+            // RichTextBoxでのTextPointer取得は複雑なため、シンプルに選択位置を設定
+            var start = Editor.Document.ContentStart.GetPositionAtOffset(position + 2);
+            var end = start?.GetPositionAtOffset(searchLength);
+
+            if (start != null && end != null)
+            {
+                Editor.Selection.Select(start, end);
+                Editor.Focus();
+
+                // スクロールして表示
+                var rect = Editor.Selection.Start.GetCharacterRect(System.Windows.Documents.LogicalDirection.Forward);
+                Editor.ScrollToVerticalOffset(Editor.VerticalOffset + rect.Top - Editor.ActualHeight / 2);
+            }
+        }
+        catch
+        {
+            // ナビゲーション失敗は無視
+        }
+    }
+
+    #endregion
+
     /// <summary>
     /// クリーンアップ
     /// </summary>
     protected override void OnClosed(EventArgs e)
     {
         _autoSaveTimer.Stop();
+        _statusUpdateTimer.Stop();
         _themeManager.ThemeChanged -= OnThemeChanged;
         base.OnClosed(e);
     }
