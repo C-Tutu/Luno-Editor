@@ -11,6 +11,7 @@
     <!-- Application Info -->
     <AssemblyName>Luno</AssemblyName>
     <RootNamespace>Luno</RootNamespace>
+    <ApplicationIcon>Assets\icon-64.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- Publish時のみAOT設定を適用（WPFはAOT制限あり） -->

@@ -381,10 +381,22 @@ public partial class MainWindow : Window
         var bgBrush = new SolidColorBrush(theme.Background);
         var textBrush = new SolidColorBrush(theme.Text);
 
+        // エディタ背景にコントラストを追加（メイン背景より少し濃い/淡い）
+        var contrastColor = isDark
+            ? Color.FromArgb(255, 
+                (byte)Math.Max(0, theme.Background.R - 15), 
+                (byte)Math.Max(0, theme.Background.G - 15), 
+                (byte)Math.Max(0, theme.Background.B - 15))
+            : Color.FromArgb(255, 
+                (byte)Math.Min(255, theme.Background.R + 10), 
+                (byte)Math.Min(255, theme.Background.G + 10), 
+                (byte)Math.Min(255, theme.Background.B + 10));
+        var editorBgBrush = new SolidColorBrush(contrastColor);
+
         // 統一カラーを適用
         Resources["BackgroundBrush"] = bgBrush;
         Resources["TextBrush"] = textBrush;
-        Resources["EditorBackgroundBrush"] = bgBrush; // 透明なしで統一
+        Resources["EditorBackgroundBrush"] = editorBgBrush; // コントラスト付き
 
         // RootGridに直接背景色を適用（全システム共通）
         RootGrid.Background = bgBrush;
@@ -443,18 +455,15 @@ public partial class MainWindow : Window
 
     private void CloseTabButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.DataContext is TabItem tab) // TemplatedParent binding hack needed or lookup
+        // VisualTreeHelperを使ってボタンからTabItemを取得
+        if (sender is Button btn)
         {
-             // Close logic handled via visual tree walk or tag
-             // For simplify, using direct tab removal if active:
-             // Note: Button click inside template doesn't easily give TabItem without helper.
-             // Relying on VisualTreeHelper to find TabItem
-             var tabItem = FindParent<TabItem>(btn);
-             if (tabItem != null)
-             {
-                 MainTabControl.Items.Remove(tabItem);
-                 if (MainTabControl.Items.Count == 0) Close();
-             }
+            var tabItem = FindParent<TabItem>(btn);
+            if (tabItem != null)
+            {
+                MainTabControl.Items.Remove(tabItem);
+                if (MainTabControl.Items.Count == 0) Close();
+            }
         }
     }
 
