@@ -18,3 +18,5 @@ artifacts/
 ## Luno Specific ##
 settings.json
 *.log
+*.zip
+Publish/
